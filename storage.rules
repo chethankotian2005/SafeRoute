@@ -1,0 +1,47 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check file size (max 5MB)
+    function isValidSize() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+    
+    // Helper function to check if file is an image
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // User profile pictures
+    match /profile_pictures/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() 
+        && request.auth.uid == userId 
+        && isValidSize() 
+        && isImage();
+    }
+    
+    // Community report images
+    match /report_images/{reportId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() 
+        && isValidSize() 
+        && isImage();
+      allow delete: if isAuthenticated();
+    }
+    
+    // SOS incident images
+    match /sos_images/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() 
+        && request.auth.uid == userId 
+        && isValidSize() 
+        && isImage();
+    }
+  }
+}

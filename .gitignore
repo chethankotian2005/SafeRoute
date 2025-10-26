@@ -87,6 +87,9 @@ ios/.xcode.env.local
 # macOS
 .DS_Store
 
+# Windows
+%ProgramData%/
+
 # Logs
 logs/
 *.log

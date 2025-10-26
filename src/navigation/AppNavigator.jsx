@@ -16,16 +16,12 @@ import MapScreen from '../screens/MapScreen';
 import NavigateScreen from '../screens/NavigateScreen';
 import CommunityScreen from '../screens/CommunityScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import EditProfileScreen from '../screens/EditProfileScreen';
-import EmergencyContactsScreen from '../screens/EmergencyContactsScreen';
-import PrivacySecurityScreen from '../screens/PrivacySecurityScreen';
 import SOSScreen from '../screens/SOSScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import RouteDetailsScreen from '../screens/RouteDetailsScreen';
 import ReportFormScreen from '../screens/ReportFormScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import RecentDestinationsScreen from '../screens/RecentDestinationsScreen';
 import LiveNavigationScreen from '../screens/LiveNavigationScreen';
 
 import { THEME_COLORS } from '../utils/constants';
@@ -175,21 +171,6 @@ const AppNavigator = ({ isAuthenticated }) => {
               options={{ headerShown: false }}
             />
             <Stack.Screen
-              name="EditProfile"
-              component={EditProfileScreen}
-              options={{ title: 'Edit Profile' }}
-            />
-            <Stack.Screen
-              name="EmergencyContacts"
-              component={EmergencyContactsScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="PrivacySecurity"
-              component={PrivacySecurityScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
               name="SOS"
               component={SOSScreen}
               options={{
@@ -215,11 +196,6 @@ const AppNavigator = ({ isAuthenticated }) => {
               name="Settings"
               component={SettingsScreen}
               options={{ title: 'Settings' }}
-            />
-            <Stack.Screen
-              name="RecentDestinations"
-              component={RecentDestinationsScreen}
-              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="LiveNavigation"

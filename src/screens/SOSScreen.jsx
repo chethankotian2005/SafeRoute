@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { THEME_COLORS } from '../utils/constants';
 import { auth } from '../config/firebaseConfig';
 import firebaseService from '../services/firebaseService';
-import sosNotificationService from '../services/sosNotificationService';
 import { getCurrentLocation } from '../services/locationService';
 
 const SOSScreen = ({ navigation }) => {
@@ -63,16 +62,16 @@ const SOSScreen = ({ navigation }) => {
     }
   };
 
-  // Choose a number to call. If there are user/emergency contacts, pick a random one; else default to 112
+  // Choose a number to call. Pick the first emergency contact; else default to 112
   const pickSOSNumber = () => {
     try {
       const valid = (emergencyContacts || []).filter(c => typeof c.number === 'string' && c.number.replace(/\D/g, '').length >= 3);
       if (valid.length > 0) {
-        const idx = Math.floor(Math.random() * valid.length);
-        return valid[idx].number;
+        // Always use the first emergency contact (most important one)
+        return valid[0].number;
       }
     } catch (e) {}
-    return '112';
+    return '112'; // Emergency number fallback
   };
 
   // Attempt to place an immediate phone call when possible (Android native module), otherwise open the dialer
@@ -119,8 +118,27 @@ const SOSScreen = ({ navigation }) => {
     }
   };
 
-  const startCountdownAndCall = () => {
+  const startCountdownAndCall = (skipConfirmation = false) => {
     if (showCountdown) return;
+    
+    // Get the emergency number (first contact or 112)
+    const number = pickSOSNumber();
+    const contactName = emergencyContacts && emergencyContacts.length > 0 
+      ? emergencyContacts[0].name 
+      : 'Emergency Services (112)';
+    
+    // If long-pressed, call immediately without countdown
+    if (skipConfirmation) {
+      setIsEmergencyActive(true);
+      initiateCall(number);
+      Alert.alert('📞 Emergency Call', `Calling ${contactName}...`);
+      setTimeout(() => {
+        setIsEmergencyActive(false);
+      }, 2000);
+      return;
+    }
+    
+    // Show countdown overlay and auto-call
     setIsEmergencyActive(true);
     setShowCountdown(true);
     setCountdown(3);
@@ -138,8 +156,13 @@ const SOSScreen = ({ navigation }) => {
         clearInterval(countdownTimerRef.current);
         countdownTimerRef.current = null;
         setShowCountdown(false);
-        const number = pickSOSNumber();
+        // Automatically call after countdown
         initiateCall(number);
+        // Show confirmation
+        Alert.alert('📞 Calling Emergency', `Connecting to ${contactName}...`);
+        setTimeout(() => {
+          setIsEmergencyActive(false);
+        }, 2000);
       }
     }, 1000);
   };
@@ -248,8 +271,8 @@ const SOSScreen = ({ navigation }) => {
                 const alertId = await firebaseService.createSOSAlert(currentLocation, emergencyContacts);
                 setSosAlertId(alertId);
 
-                // Send notification to this user that SOS was activated
-                await sosNotificationService.sendSOSActivatedNotification();
+                // Notification service removed - using Firebase Cloud Messaging instead
+                // await sosNotificationService.sendSOSActivatedNotification();
 
                 Alert.alert('SOS ACTIVATED', 'Your emergency alert has been sent to your contacts and nearby users!');
               } catch (err) {
@@ -275,7 +298,8 @@ const SOSScreen = ({ navigation }) => {
               if (sosAlertId) {
                 try {
                   await firebaseService.deactivateSOSAlert(sosAlertId);
-                  await sosNotificationService.sendSOSDeactivatedNotification();
+                  // Notification service removed - using Firebase Cloud Messaging instead
+                  // await sosNotificationService.sendSOSDeactivatedNotification();
                 } catch (err) {
                   console.error('Failed to deactivate SOS:', err);
                 }
@@ -323,12 +347,17 @@ const SOSScreen = ({ navigation }) => {
 
         {/* SOS Button */}
         <View style={styles.sosContainer}>
-          <Text style={styles.sosTitle}>SOS Alert System</Text>
-          <Text style={styles.sosSubtitle}>Press to initiate emergency call</Text>
+          <Text style={styles.sosTitle}>Emergency Call</Text>
+          <Text style={styles.sosSubtitle}>
+            {emergencyContacts && emergencyContacts.length > 0
+              ? `Will call: ${emergencyContacts[0].name} (${emergencyContacts[0].number})`
+              : 'Will call: Emergency Services (112)'}
+          </Text>
           
           <TouchableOpacity
-            onPress={startCountdownAndCall}
-            onLongPress={startCountdownAndCall}
+            onPress={() => startCountdownAndCall(false)}
+            onLongPress={() => startCountdownAndCall(true)}
+            delayLongPress={800}
             style={styles.sosButtonWrapper}
             activeOpacity={0.9}
           >
@@ -338,8 +367,10 @@ const SOSScreen = ({ navigation }) => {
             >
               <Ionicons name="alert-circle" size={60} color="#FFFFFF" />
               <Text style={styles.sosButtonText}>SOS</Text>
-              {isEmergencyActive && (
+              {isEmergencyActive ? (
                 <Text style={styles.activeText}>ACTIVE</Text>
+              ) : (
+                <Text style={styles.longPressHint}>Long-press for instant call</Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -522,6 +553,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
     letterSpacing: 1,
+  },
+  longPressHint: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 6,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    paddingHorizontal: 10,
   },
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,

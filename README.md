@@ -1,443 +1,237 @@
-# SafeRoute - AI-Powered Community Safety Navigation App
+# SafeRoute
 
-SafeRoute is a React Native mobile application designed to prioritize safety over speed in navigation. Built specifically for vulnerable populations (women, elderly, disabled users) in India, it uses Google Maps API, AI vision analysis, and community-driven data to provide the safest routes, not just the fastest ones.
+Navigation reimagined for safety. Because the shortest route isn't always the safest one.
 
-## 🌟 Core Features
+## What is SafeRoute?
 
-- **Safety-Scored Routing**: Routes rated 1-10 based on lighting, foot traffic, time of day, and community data
-- **Real-Time Community Reporting**: Users can report and view safety concerns in real-time
-- **Time-Aware Routing**: Same route scored differently for day vs. night travel
-- **Accessibility Mode**: Special routing for wheelchair users with ramp access and flat terrain
-- **One-Tap SOS**: Emergency alert with live location sharing to trusted contacts
-- **Safe Spot Mapping**: Hospitals, police stations, pharmacies, and 24/7 stores highlighted
-- **Multi-Language Support**: English, Hindi, Tamil, Telugu, and more
+SafeRoute helps you find the safest way to your destination, not just the fastest. We analyze routes based on street lighting, foot traffic, community reports, and historical safety data to give you peace of mind while navigating.
 
-## 📋 Table of Contents
+**Try it now:** [Download Android App](https://expo.dev/artifacts/eas/7N6TFNVKUZ28ZLnN8at9rt.apk)
 
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Firebase Setup](#firebase-setup)
-- [Google Cloud Setup](#google-cloud-setup)
-- [Environment Configuration](#environment-configuration)
-- [Running the App](#running-the-app)
-- [Project Structure](#project-structure)
-- [Safety Scoring Algorithm](#safety-scoring-algorithm)
-- [Development Workflow](#development-workflow)
-- [Troubleshooting](#troubleshooting)
+## Why SafeRoute?
 
-## 🔧 Prerequisites
+Most navigation apps optimize for speed. We optimize for safety. Every route gets a safety score based on real factors that matter when you're walking alone.
 
-Before you begin, ensure you have the following installed:
+### What makes a route "safe"?
 
-- **Node.js** (v16 or higher): [Download](https://nodejs.org/)
-- **npm** or **yarn**: Comes with Node.js
-- **Expo CLI**: `npm install -g expo-cli`
-- **Git**: [Download](https://git-scm.com/)
-- **Android Studio** (for Android development)
-- **Xcode** (for iOS development, macOS only)
+- Well-lit streets and pedestrian areas
+- Higher foot traffic (more people around)
+- Proximity to police stations and public spaces
+- Low crime history
+- Recent community safety reports
+- Time of day considerations
 
-### Required Accounts
+## Features
 
-- Google Cloud Platform account (for Maps, Places, Cloud Vision APIs)
-- Firebase account (for authentication, database, storage)
-- Expo account (for deployment and OTA updates)
+### Route Comparison
+See three different routes with safety scores:
+- **Safest Route** (Green): Best lighting, most foot traffic
+- **Balanced Route** (Yellow): Good mix of safety and efficiency  
+- **Fastest Route** (Red/Yellow): Quickest but may have safety concerns
 
-## 📥 Installation
+### Live Navigation
+- Voice-guided turn-by-turn directions
+- Real-time location tracking with compass
+- Dynamic instruction updates as you walk
+- Battery-efficient GPS tracking
 
-### 1. Clone or Navigate to the Repository
+### Community Safety
+- Report incidents with photos and descriptions
+- View recent safety reports near you
+- Get alerts about nearby emergencies
+- Rate routes based on your experience
+
+### Emergency Tools
+- One-tap SOS with location sharing
+- Quick dial to police/ambulance
+- Emergency contact management
+- Automatic location sharing during emergencies
+
+## Tech Stack
+
+Built with modern, reliable tools:
+
+**Mobile App**
+- React Native (Expo framework)
+- JavaScript/React for UI components
+- expo-location for GPS tracking
+- expo-sensors for compass functionality
+- expo-speech for voice navigation
+
+**Backend & Services**
+- Firebase Authentication (user accounts)
+- Cloud Firestore (database)
+- Firebase Storage (images)
+- Google Maps JavaScript API (routing & maps)
+- Google Cloud Vision API (safety analysis)
+
+## Getting Started
+
+### For Users
+
+1. Download the app: [SafeRoute APK](https://expo.dev/artifacts/eas/7N6TFNVKUZ28ZLnN8at9rt.apk)
+2. Enable installation from unknown sources
+3. Install and launch
+4. Sign up or log in
+5. Start navigating safely
+
+### For Developers
+
+**Requirements:**
+- Node.js 16+
+- npm or yarn
+- Expo CLI
+- Firebase account
+- Google Cloud account
+
+**Setup:**
 
 ```bash
-cd "C:\Users\chethan kotian\Desktop\SafeRoute"
-```
+# Clone repository
+git clone https://github.com/chethankotian2005/SafeRoute.git
+cd SafeRoute
 
-### 2. Install Dependencies
-
-```bash
+# Install dependencies
 npm install
-```
 
-Or if using yarn:
-
-```bash
-yarn install
-```
-
-## 🔥 Firebase Setup
-
-### Step 1: Create a Firebase Project
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click **Add Project**
-3. Enter project name: `saferoute` (or your preferred name)
-4. Disable Google Analytics (optional for development)
-5. Click **Create Project**
-
-### Step 2: Register Your App
-
-1. In Firebase Console, click on **Web icon** (</>) to add a web app
-2. Register app with nickname: `SafeRoute`
-3. Copy the Firebase configuration object (you'll need this later)
-
-### Step 3: Enable Authentication
-
-1. Go to **Authentication** → **Sign-in method**
-2. Enable the following providers:
-   - **Email/Password**
-   - **Phone** (for OTP-based login)
-   - **Google** (optional)
-
-### Step 4: Create Firestore Database
-
-1. Go to **Firestore Database** → **Create database**
-2. Start in **test mode** (we'll deploy security rules later)
-3. Choose a location close to your users (e.g., `asia-south1` for India)
-
-### Step 5: Create Realtime Database
-
-1. Go to **Realtime Database** → **Create database**
-2. Start in **locked mode**
-3. Same location as Firestore
-
-### Step 6: Set Up Storage
-
-1. Go to **Storage** → **Get started**
-2. Start in **test mode**
-3. Same location
-
-### Step 7: Deploy Security Rules
-
-From your project directory:
-
-```bash
-# Install Firebase CLI
-npm install -g firebase-tools
-
-# Login to Firebase
-firebase login
-
-# Initialize Firebase in your project
-firebase init
-
-# Select:
-# - Firestore
-# - Realtime Database
-# - Storage
-# - Functions (if you want to use Cloud Functions)
-
-# Deploy security rules
-firebase deploy --only firestore:rules
-firebase deploy --only database
-firebase deploy --only storage
-```
-
-## 🗺️ Google Cloud Setup
-
-### Step 1: Create a Google Cloud Project
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project: `SafeRoute`
-3. Note your **Project ID**
-
-### Step 2: Enable Required APIs
-
-In the Google Cloud Console, enable the following APIs:
-
-1. **Maps JavaScript API**
-2. **Directions API**
-3. **Places API**
-4. **Geocoding API**
-5. **Street View Static API**
-6. **Cloud Vision API**
-
-To enable APIs:
-- Go to **APIs & Services** → **Library**
-- Search for each API and click **Enable**
-
-### Step 3: Create API Keys
-
-1. Go to **APIs & Services** → **Credentials**
-2. Click **Create Credentials** → **API Key**
-3. Create **three separate API keys**:
-   - **Google Maps API Key** (for general maps usage)
-   - **Google Places API Key** (for places searches)
-   - **Google Cloud Vision API Key** (for image analysis)
-
-### Step 4: Restrict API Keys (IMPORTANT for Security)
-
-For **Google Maps API Key**:
-- Application restrictions: **Android apps** and **iOS apps**
-- Add your app's package name/bundle identifier
-- API restrictions: Restrict to **Maps JavaScript API, Directions API, Geocoding API, Street View Static API**
-
-For **Google Cloud Vision API Key**:
-- Application restrictions: **Android apps** and **iOS apps**
-- API restrictions: Restrict to **Cloud Vision API**
-
-### Step 5: Enable Billing
-
-⚠️ **Important**: Most Google Maps APIs require billing to be enabled
-- Set up a billing account
-- Set budget alerts to avoid unexpected charges
-- Take advantage of the $200 monthly free credit
-
-## 🔐 Environment Configuration
-
-### Step 1: Copy Environment Template
-
-```bash
+# Create environment file
 cp .env.example .env
+# Add your API keys to .env
+
+# Start development server
+npx expo start
 ```
 
-### Step 2: Fill in Your Credentials
+**Environment Variables:**
 
-Open `.env` and add your credentials:
+Create a `.env` file:
 
-```env
-# Google Maps & Places API
-GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
-GOOGLE_PLACES_API_KEY=your_google_places_api_key_here
-GOOGLE_CLOUD_VISION_API_KEY=your_cloud_vision_api_key_here
-
-# Firebase Configuration
-FIREBASE_API_KEY=your_firebase_api_key_here
-FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-FIREBASE_PROJECT_ID=your_project_id
-FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-FIREBASE_APP_ID=your_firebase_app_id
-FIREBASE_MEASUREMENT_ID=your_measurement_id
-FIREBASE_DATABASE_URL=https://your_project_id.firebaseio.com
+```
+FIREBASE_API_KEY=your_key_here
+FIREBASE_AUTH_DOMAIN=your_domain
+FIREBASE_PROJECT_ID=your_project
+FIREBASE_STORAGE_BUCKET=your_bucket
+FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+FIREBASE_APP_ID=your_app_id
+GOOGLE_MAPS_API_KEY=your_maps_key
+GOOGLE_CLOUD_VISION_API_KEY=your_vision_key
 ```
 
-### Step 3: Update app.json
+## How It Works
 
-1. Open `app.json`
-2. Replace placeholder Google Maps API keys:
-   - For iOS: `config.googleMapsApiKey`
-   - For Android: `config.googleMaps.apiKey`
+### Safety Scoring
 
-```json
-"ios": {
-  "config": {
-    "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_API_KEY"
-  }
-},
-"android": {
-  "config": {
-    "googleMaps": {
-      "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
-    }
-  }
-}
-```
+Each route is scored from 1-10 based on:
 
-## 🚀 Running the App
+1. **Lighting Analysis** (30% weight)
+   - Street lights detected via image analysis
+   - Ambient lighting from buildings/shops
+   - Time of day adjustments
 
-### Start Expo Development Server
+2. **Foot Traffic** (25% weight)
+   - Pedestrian density estimates
+   - Business hours and activity
+   - Historical usage patterns
 
-```bash
-npm start
-```
+3. **Community Data** (25% weight)
+   - Recent incident reports
+   - User safety ratings
+   - Community alert frequency
 
-Or:
+4. **Infrastructure** (20% weight)
+   - Proximity to safe spots (police, hospitals)
+   - Public CCTV coverage
+   - Emergency call boxes
 
-```bash
-expo start
-```
+### Route Selection Process
 
-### Run on Android
+1. User enters destination
+2. System calculates 3 different routes
+3. Each route analyzed for safety factors
+4. Routes displayed with color-coded scores:
+   - 🟢 7-10: Safe to walk
+   - 🟡 4-6: Moderate caution advised
+   - 🔴 1-3: Avoid if possible
 
-```bash
-npm run android
-```
-
-Or press `a` in the Expo CLI
-
-### Run on iOS (macOS only)
-
-```bash
-npm run ios
-```
-
-Or press `i` in the Expo CLI
-
-### Run on Web (for testing only)
-
-```bash
-npm run web
-```
-
-Or press `w` in the Expo CLI
-
-### Using Expo Go App
-
-1. Install **Expo Go** on your phone from Play Store/App Store
-2. Scan the QR code shown in your terminal
-3. App will load on your device
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 SafeRoute/
 ├── src/
-│   ├── components/          # Reusable UI components
-│   │   ├── MapView.jsx
-│   │   ├── RouteCard.jsx
-│   │   ├── SafetyScore.jsx
-│   │   ├── SOSButton.jsx
-│   │   └── CommunityAlert.jsx
-│   ├── screens/             # Main app screens
+│   ├── components/          # Reusable UI elements
+│   ├── screens/            # Main app screens
 │   │   ├── HomeScreen.jsx
-│   │   ├── MapScreen.jsx
+│   │   ├── NavigateScreen.jsx
+│   │   ├── LiveNavigationScreen.jsx
 │   │   ├── CommunityScreen.jsx
-│   │   ├── ProfileScreen.jsx
 │   │   └── SOSScreen.jsx
-│   ├── navigation/          # Navigation configuration
-│   │   └── AppNavigator.jsx
-│   ├── services/            # API and business logic
-│   │   ├── googleMapsService.js
-│   │   ├── safetyScoring.js
+│   ├── services/           # API integrations
 │   │   ├── firebaseService.js
-│   │   └── locationService.js
-│   ├── hooks/               # Custom React hooks
-│   │   ├── useLocation.js
-│   │   ├── useSafetyData.js
-│   │   └── useCommunityAlerts.js
-│   ├── utils/               # Helper functions
-│   │   ├── validators.js
-│   │   ├── constants.js
-│   │   ├── permissions.js
-│   │   └── helpers.js
-│   ├── config/              # Configuration files
-│   │   └── firebaseConfig.js
-│   └── assets/              # Images, fonts, etc.
-├── functions/               # Firebase Cloud Functions
-├── App.js                   # Main entry point
-├── app.json                 # Expo configuration
-├── package.json             # Dependencies
-├── firebase.json            # Firebase configuration
-└── .env                     # Environment variables (DO NOT COMMIT)
+│   │   ├── googleMapsService.js
+│   │   └── safetyScoring.js
+│   ├── utils/             # Helper functions
+│   ├── navigation/        # App navigation
+│   └── config/           # Configuration
+├── assets/               # Images and icons
+├── .env                 # Environment variables
+└── app.json            # Expo configuration
 ```
 
-## 🧮 Safety Scoring Algorithm
+## Contributing
 
-Routes are scored from **1-10** based on:
+Found a bug? Have an idea? Contributions welcome!
 
-### Factors (100% total weight)
+1. Fork the repo
+2. Create a branch (`git checkout -b feature/improvement`)
+3. Make changes and commit (`git commit -am 'Add feature'`)
+4. Push (`git push origin feature/improvement`)
+5. Open a Pull Request
 
-1. **Street Lighting** (30%): Analyzed using Google Cloud Vision API on Street View images
-2. **Foot Traffic Density** (25%): Based on Google Places popular times data
-3. **Time of Day** (20%): Day travel (+2 bonus), night travel (-2 penalty)
-4. **Safe Spot Proximity** (15%): Distance to hospitals, police stations within 500m
-5. **Community Reports** (10%): Recent incident reports near the route
+## Privacy
 
-### Score Ranges
+- Location data used only during active navigation
+- No background tracking
+- Community reports are anonymous
+- Emergency contacts encrypted
+- You can delete your account and data anytime
 
-- **8-10**: Excellent (Green) - Highly recommended
-- **6-7**: Good (Yellow) - Generally safe
-- **4-5**: Moderate (Orange) - Use caution
-- **1-3**: Poor (Red) - Consider alternative route
+## Future Plans
 
-## 🛠️ Development Workflow
+- [ ] iOS version
+- [ ] Offline mode with cached maps
+- [ ] Group walk feature (navigate with friends)
+- [ ] Public transport integration
+- [ ] Wearable device support
+- [ ] More language options
+- [ ] Integration with local authorities
 
-### 1. Start Development Server
+## Known Issues
 
-```bash
-npm start
-```
+- Voice navigation requires internet connection
+- First launch may take a moment to load maps
+- Some areas may have limited safety data
 
-### 2. Make Changes
+## License
 
-Edit files in the `src/` directory. Changes will hot-reload automatically.
+MIT License - See LICENSE file
 
-### 3. Test on Device
+## Credits
 
-Use Expo Go app or simulator/emulator
+Developed by Chethan Kotian
 
-### 4. Debug
+Special thanks to:
+- Google Maps Platform
+- Firebase team
+- Expo framework
+- React Native community
+- All beta testers
 
-- Use **React Native Debugger**
-- Check console logs in terminal
-- Use Expo DevTools (press `d` in terminal)
+## Contact
 
-### 5. Build for Production
-
-```bash
-# For Android
-eas build --platform android
-
-# For iOS
-eas build --platform ios
-```
-
-## 🐛 Troubleshooting
-
-### Issue: "Module not found" errors
-
-**Solution:**
-```bash
-rm -rf node_modules
-npm install
-```
-
-### Issue: "Google Maps not showing"
-
-**Solution:**
-- Verify API key in `.env` and `app.json`
-- Check if Maps JavaScript API is enabled
-- Ensure billing is enabled on Google Cloud
-
-### Issue: "Firebase authentication failed"
-
-**Solution:**
-- Verify Firebase config in `.env`
-- Check if authentication providers are enabled in Firebase Console
-- Clear app cache and restart
-
-### Issue: "Location permission denied"
-
-**Solution:**
-- Check `app.json` for permission strings
-- On Android: Enable location in device settings
-- On iOS: Check Info.plist for location usage descriptions
-
-### Issue: Expo build fails
-
-**Solution:**
-```bash
-expo doctor
-npm install --legacy-peer-deps
-```
-
-## 📱 Testing Checklist
-
-- [ ] User can sign up and login
-- [ ] Location permission is requested
-- [ ] Map displays user's current location
-- [ ] Routes are fetched and displayed
-- [ ] Safety scores are calculated
-- [ ] Community reports can be submitted
-- [ ] SOS button activates emergency flow
-- [ ] Navigation works between screens
-
-## 🔒 Security Checklist
-
-- [ ] `.env` file is in `.gitignore`
-- [ ] API keys are restricted in Google Cloud Console
-- [ ] Firebase security rules are deployed
-- [ ] User input is sanitized
-- [ ] HTTPS is used for all API calls
-
-## 📞 Support & Contact
-
-For issues or questions:
-- Create an issue in the repository
-- Contact: [Your Contact Info]
-
-## 📄 License
-
-MIT License - See LICENSE file for details
+**Developer:** Chethan Kotian  
+**GitHub:** [@chethankotian2005](https://github.com/chethankotian2005)  
+**Repository:** [SafeRoute](https://github.com/chethankotian2005/SafeRoute)
 
 ---
 
-**Built with ❤️ for safer communities**
+Made for safer journeys 🛡️

@@ -69,7 +69,7 @@ const ProfileScreen = ({ navigation }) => {
     {
       title: 'Account',
       items: [
-        { icon: 'person-outline', label: 'Edit Profile', onPress: () => navigation.navigate('EditProfile') },
+        { icon: 'person-outline', label: 'Edit Profile', onPress: () => Alert.alert('Edit Profile', 'Profile editing coming soon!') },
         { icon: 'settings-outline', label: 'Settings', onPress: () => navigation.navigate('Settings') },
       ]
     },
@@ -78,14 +78,14 @@ const ProfileScreen = ({ navigation }) => {
       items: [
         { icon: 'time-outline', label: 'Safety History', onPress: () => Alert.alert('Safety History', 'View your route history') },
         { icon: 'bookmark-outline', label: 'Saved Locations', onPress: () => Alert.alert('Saved Locations', 'Manage your saved places') },
-        { icon: 'alert-circle-outline', label: 'Emergency Contacts', onPress: () => navigation.navigate('EmergencyContacts') },
+        { icon: 'alert-circle-outline', label: 'Emergency Contacts', onPress: () => Alert.alert('Emergency Contacts', 'Emergency contacts feature coming soon!') },
       ]
     },
     {
       title: 'Preferences',
       items: [
         { icon: 'notifications-outline', label: 'Notifications', onPress: () => Alert.alert('Notifications', 'Manage your notifications') },
-        { icon: 'lock-closed-outline', label: 'Privacy & Security', onPress: () => navigation.navigate('PrivacySecurity') },
+        { icon: 'lock-closed-outline', label: 'Privacy & Security', onPress: () => Alert.alert('Privacy & Security', 'Privacy settings coming soon!') },
         { icon: 'globe-outline', label: 'Language', onPress: () => Alert.alert('Language', 'Choose your language') },
         { icon: 'moon-outline', label: 'Dark Mode', onPress: toggleDarkMode, toggle: true, value: isDarkMode },
       ]
@@ -110,7 +110,7 @@ const ProfileScreen = ({ navigation }) => {
           {/* Avatar */}
           <TouchableOpacity 
             style={styles.avatarContainer}
-            onPress={() => navigation.navigate('EditProfile')}
+            onPress={() => Alert.alert('Edit Profile', 'Profile editing coming soon!')}
           >
             {userData?.profileImage ? (
               <Image 

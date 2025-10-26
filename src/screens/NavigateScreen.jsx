@@ -24,7 +24,6 @@ import { useTheme } from '../context/ThemeContext';
 import { GOOGLE_MAPS_API_KEY } from '../config/apiKeys';
 import * as Location from 'expo-location';
 import { analyzeRouteSafety, getRouteColor, getRouteSafetyLevel } from '../services/safetyAnalysisService';
-import { navigationManager, parseNavigationSteps, generateVoiceInstruction } from '../services/navigationService';
 import { calculateWalkingRoutes, decodePolyline, getRouteInstructions } from '../services/routeCalculationService';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -51,6 +50,20 @@ const getManeuverIcon = (maneuver) => {
   if (maneuverLower.includes('arrive') || maneuverLower.includes('destination')) return 'flag';
   
   return 'navigate';
+};
+
+// Helper function to format distance
+const formatDistance = (meters) => {
+  if (!meters || isNaN(meters)) return '0 m';
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+};
+
+// Legacy navigation manager (kept for backward compatibility)
+const navigationManager = {
+  getManeuverIcon,
+  formatDistance,
+  stopNavigation: () => {}, // No-op since navigation is in LiveNavigationScreen
 };
 
 const NavigateScreen = ({ navigation, route }) => {
@@ -103,14 +116,20 @@ const NavigateScreen = ({ navigation, route }) => {
         // Only respond to vertical drags
         return Math.abs(gestureState.dy) > 5;
       },
-      onPanResponderMove: (_, gestureState) => {
-        const newPosition = (SCREEN_HEIGHT - currentSnapPoint) + gestureState.dy;
-        // Constrain between collapsed and expanded
-        const minY = SCREEN_HEIGHT - SNAP_POINTS.EXPANDED;
-        const maxY = SCREEN_HEIGHT - SNAP_POINTS.COLLAPSED;
-        const constrainedPosition = Math.max(minY, Math.min(maxY, newPosition));
-        sheetPosition.setValue(constrainedPosition);
-      },
+      onPanResponderMove: Animated.event(
+        [null, { dy: sheetPosition }],
+        { 
+          useNativeDriver: false,
+          listener: (_, gestureState) => {
+            const newPosition = (SCREEN_HEIGHT - currentSnapPoint) + gestureState.dy;
+            // Constrain between collapsed and expanded
+            const minY = SCREEN_HEIGHT - SNAP_POINTS.EXPANDED;
+            const maxY = SCREEN_HEIGHT - SNAP_POINTS.COLLAPSED;
+            const constrainedPosition = Math.max(minY, Math.min(maxY, newPosition));
+            sheetPosition.setValue(constrainedPosition);
+          }
+        }
+      ),
       onPanResponderRelease: (_, gestureState) => {
         // Determine which snap point to animate to
         const velocity = gestureState.vy;
@@ -145,8 +164,9 @@ const NavigateScreen = ({ navigation, route }) => {
         Animated.spring(sheetPosition, {
           toValue: SCREEN_HEIGHT - targetSnapPoint,
           useNativeDriver: false,
-          tension: 50,
-          friction: 10,
+          tension: 65,
+          friction: 8,
+          velocity: -gestureState.vy,
         }).start();
       },
     })
@@ -235,8 +255,8 @@ const NavigateScreen = ({ navigation, route }) => {
     Animated.spring(sheetPosition, {
       toValue: SCREEN_HEIGHT - targetSnapPoint,
       useNativeDriver: false,
-      tension: 50,
-      friction: 10,
+      tension: 65,
+      friction: 8,
     }).start();
   }, [isNavigating]);
 
@@ -248,8 +268,8 @@ const NavigateScreen = ({ navigation, route }) => {
       Animated.spring(sheetPosition, {
         toValue: SCREEN_HEIGHT - targetSnapPoint,
         useNativeDriver: false,
-        tension: 50,
-        friction: 10,
+        tension: 65,
+        friction: 8,
       }).start();
     }
   }, [routes.route1]);
@@ -928,9 +948,8 @@ const NavigateScreen = ({ navigation, route }) => {
     */
   };
 
-  // Stop navigation
+  // Stop navigation (legacy - navigation now handled by LiveNavigationScreen)
   const stopNavigation = () => {
-    navigationManager.stopNavigation();
     setIsNavigating(false);
     setNavigationData(null);
     setCurrentInstruction('');
@@ -1890,6 +1909,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     maxHeight: 300,
+    zIndex: 150,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1953,7 +1973,7 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
     }),
-    zIndex: 99,
+    zIndex: 10,
   },
   liveDot: {
     width: 8,
@@ -1973,7 +1993,7 @@ const styles = StyleSheet.create({
     right: 16,
     top: STATUS_BAR_HEIGHT + 120,
     gap: 12,
-    zIndex: 1,
+    zIndex: 10,
   },
   controlButton: {
     width: 48,
@@ -2039,6 +2059,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    zIndex: 100,
     ...Platform.select({
       ios: {
         shadowColor: '#000',

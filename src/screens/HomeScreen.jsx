@@ -157,7 +157,8 @@ const HomeScreen = ({ navigation }) => {
 
   // Navigate to See All destinations screen
   const handleSeeAllDestinations = () => {
-    navigation.navigate('RecentDestinations');
+    // RecentDestinations screen removed - keeping data in HomeScreen only
+    Alert.alert('Recent Destinations', 'View all recent destinations feature coming soon!');
   };
 
   // Hero animations based on scroll - Uber-style collapse

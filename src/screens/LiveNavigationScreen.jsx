@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, Dimensio
 import { WebView } from 'react-native-webview';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { Magnetometer } from 'expo-sensors';
+import * as Speech from 'expo-speech';
 import { THEME_COLORS } from '../utils/constants';
 import { useTheme } from '../context/ThemeContext';
 import { GOOGLE_MAPS_API_KEY } from '../config/apiKeys';
@@ -60,6 +62,22 @@ const LiveNavigationScreen = ({ route, navigation }) => {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isMapLoading, setIsMapLoading] = useState(true);
   const [mapError, setMapError] = useState(null);
+  const hasSpokenWelcome = useRef(false); // Track if welcome message was spoken
+
+  // Welcome voice announcement when navigation starts
+  useEffect(() => {
+    if (voiceEnabled && !hasSpokenWelcome.current && instructions && instructions.length > 0) {
+      hasSpokenWelcome.current = true;
+      setTimeout(() => {
+        const firstInstruction = instructions[0]?.instruction || instructions[0]?.text || 'Starting navigation';
+        Speech.speak(`Navigation started. ${firstInstruction}`, {
+          language: 'en-US',
+          pitch: 1.0,
+          rate: 0.9,
+        });
+      }, 2000); // Wait 2 seconds before first announcement
+    }
+  }, [voiceEnabled, instructions]);
 
   useEffect(() => {
     let locationSubscription;
@@ -175,6 +193,83 @@ const LiveNavigationScreen = ({ route, navigation }) => {
     };
   }, [mapReady]);
 
+  // Magnetometer for accurate compass heading (like Google Maps)
+  useEffect(() => {
+    let magnetometerSubscription;
+
+    const startCompass = async () => {
+      try {
+        // Check if magnetometer is available
+        const isAvailable = await Magnetometer.isAvailableAsync();
+        if (!isAvailable) {
+          console.log('Magnetometer not available on this device');
+          return;
+        }
+
+        console.log('Starting magnetometer for compass...');
+        
+        // Set update interval to 200ms for smooth rotation without overwhelming the UI
+        Magnetometer.setUpdateInterval(200);
+
+        // Subscribe to magnetometer updates
+        magnetometerSubscription = Magnetometer.addListener((data) => {
+          const { x, y, z } = data;
+          
+          // Calculate heading from magnetometer data
+          // Heading is the angle between magnetic north and the device's y-axis
+          let angle = Math.atan2(y, x) * (180 / Math.PI);
+          
+          // Normalize to 0-360 degrees
+          angle = angle < 0 ? angle + 360 : angle;
+          
+          // Google Maps uses a different coordinate system
+          // We need to adjust the angle to match map's north (0°)
+          let compassHeading;
+          
+          if (Platform.OS === 'ios') {
+            // iOS magnetometer needs adjustment
+            compassHeading = (450 - angle) % 360;
+          } else {
+            // Android magnetometer 
+            compassHeading = (360 - angle) % 360;
+          }
+          
+          // Directly update heading without complex smoothing to avoid lag
+          setHeading(Math.round(compassHeading));
+
+          // Update marker rotation in real-time based on magnetometer heading
+          if (webViewRef.current && mapReady) {
+            webViewRef.current.injectJavaScript(`
+              if (window.userMarker) {
+                const icon = window.userMarker.getIcon();
+                if (icon) {
+                  icon.rotation = ${compassHeading};
+                  window.userMarker.setIcon(icon);
+                }
+              }
+              true;
+            `);
+          }
+
+          console.log('Compass updated:', Math.round(compassHeading), 'Raw angle:', Math.round(angle));
+        });
+
+        console.log('Magnetometer compass started successfully');
+      } catch (error) {
+        console.error('Error starting magnetometer:', error);
+      }
+    };
+
+    startCompass();
+
+    return () => {
+      if (magnetometerSubscription) {
+        magnetometerSubscription.remove();
+        console.log('Magnetometer stopped');
+      }
+    };
+  }, []); // Empty dependency array - only start once when component mounts
+
   // Calculate distance between two coordinates in meters using Haversine formula
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; // Earth's radius in meters
@@ -252,8 +347,26 @@ const LiveNavigationScreen = ({ route, navigation }) => {
           maneuver: nextStep.maneuver || 'straight'
         });
         
-        // Voice feedback would go here
+        // Voice alert for next turn
+        if (voiceEnabled) {
+          const voiceText = nextStep.instruction || nextStep.text || 'Continue straight';
+          Speech.speak(voiceText, {
+            language: 'en-US',
+            pitch: 1.0,
+            rate: 0.9,
+          });
+        }
+        
         console.log('Moving to next instruction:', nextStep.instruction);
+      } 
+      // Voice alert when approaching turn (50 meters away)
+      else if (distanceToStep < 50 && distanceToStep > 40 && voiceEnabled) {
+        const voiceText = `In 50 meters, ${currentStep.instruction || currentStep.text}`;
+        Speech.speak(voiceText, {
+          language: 'en-US',
+          pitch: 1.0,
+          rate: 0.9,
+        });
       }
 
       // Calculate total remaining distance to destination
@@ -636,17 +749,30 @@ const LiveNavigationScreen = ({ route, navigation }) => {
               {currentInstruction.text || 'Turn left'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.voiceButton}>
-            <Ionicons name="volume-high" size={24} color="#FFFFFF" />
+          <TouchableOpacity 
+            style={styles.voiceButton}
+            onPress={() => {
+              setVoiceEnabled(!voiceEnabled);
+              // Stop any ongoing speech
+              if (!voiceEnabled) {
+                Speech.stop();
+              }
+            }}
+          >
+            <Ionicons 
+              name={voiceEnabled ? "volume-high" : "volume-mute"} 
+              size={24} 
+              color="#FFFFFF" 
+            />
           </TouchableOpacity>
         </View>
 
         {/* Next instruction preview */}
-        {instructions && instructions.length > 1 && (
+        {instructions && instructions.length > nextInstructionIndex + 1 && (
           <View style={styles.nextInstruction}>
             <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.8)" />
             <Text style={styles.nextInstructionText}>
-              Then {instructions[1]?.instruction || instructions[1]?.text || 'continue straight'}
+              Then {instructions[nextInstructionIndex + 1]?.instruction || instructions[nextInstructionIndex + 1]?.text || 'continue straight'}
             </Text>
           </View>
         )}
@@ -677,7 +803,7 @@ const LiveNavigationScreen = ({ route, navigation }) => {
         style={[styles.cancelButton, { backgroundColor: colors.surface }]}
         onPress={handleCancelNavigation}
       >
-        <Ionicons name="close" size={28} color={colors.text} />
+        <Ionicons name="close" size={22} color={colors.text} />
       </TouchableOpacity>
 
       {/* Re-center Button */}
@@ -687,8 +813,9 @@ const LiveNavigationScreen = ({ route, navigation }) => {
           if (currentLocation && webViewRef.current && mapReady) {
             const jsCode = `
               if (map && window.userMarker) {
-                map.panTo({ lat: ${currentLocation.latitude}, lng: ${currentLocation.longitude} });
-                map.setZoom(17);
+                const userPos = { lat: ${currentLocation.latitude}, lng: ${currentLocation.longitude} };
+                map.setCenter(userPos);
+                map.setZoom(18);
               }
               true;
             `;
@@ -698,17 +825,6 @@ const LiveNavigationScreen = ({ route, navigation }) => {
       >
         <MaterialCommunityIcons name="crosshairs-gps" size={24} color={colors.text} />
       </TouchableOpacity>
-
-      {/* Compass Indicator */}
-      <View style={[styles.compassContainer, { backgroundColor: colors.surface }]}>
-        <View style={[styles.compassCircle, { transform: [{ rotate: `${-heading}deg` }] }]}>
-          <View style={styles.compassNorth}>
-            <Text style={styles.compassN}>N</Text>
-          </View>
-          <View style={styles.compassArrow} />
-        </View>
-        <Text style={[styles.compassDegree, { color: colors.text }]}>{Math.round(heading)}°</Text>
-      </View>
 
       {/* Map Controls */}
       <View style={[styles.mapControls, { backgroundColor: colors.surface }]}>
@@ -814,7 +930,6 @@ const LiveNavigationScreen = ({ route, navigation }) => {
         <View style={styles.gpsPulse} />
         <Ionicons name="navigate" size={14} color="#FFFFFF" style={{ transform: [{ rotate: `${heading}deg` }] }} />
         <Text style={styles.gpsText}>LIVE</Text>
-        <Text style={styles.headingText}>{Math.round(heading)}°</Text>
       </View>
     </View>
   );
@@ -928,9 +1043,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: STATUS_BAR_HEIGHT + 10,
     left: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

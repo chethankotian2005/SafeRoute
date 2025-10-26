@@ -4,8 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GOOGLE_MAPS_API_KEY } from '@env';
-
+import { GOOGLE_MAPS_API_KEY } from '../config/apiKeys';
 const STREET_VIEW_BASE_URL = 'https://maps.googleapis.com/maps/api/streetview';
 const STREET_VIEW_METADATA_URL = 'https://maps.googleapis.com/maps/api/streetview/metadata';
 const SAMPLING_DISTANCE = 200; // meters between samples

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert, Modal } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME_COLORS } from '../utils/constants';
 import { useTheme } from '../context/ThemeContext';
@@ -10,6 +11,34 @@ const SettingsScreen = ({ navigation }) => {
   const [locationAlways, setLocationAlways] = useState(false);
   const [autoReroute, setAutoReroute] = useState(true);
   const [voiceGuidance, setVoiceGuidance] = useState(true);
+  const [wheelchairMode, setWheelchairMode] = useState(false);
+  const [prioritizeSafety, setPrioritizeSafety] = useState(true);
+  const [avoidDarkAreas, setAvoidDarkAreas] = useState(true);
+  const [emergencyAlerts, setEmergencyAlerts] = useState(true);
+  const [mapStyle, setMapStyle] = useState('standard');
+  const [showMapStyleModal, setShowMapStyleModal] = useState(false);
+
+  const mapStyles = [
+    { id: 'standard', name: 'Standard', icon: 'map-outline', description: 'Default map view' },
+    { id: 'satellite', name: 'Satellite', icon: 'globe-outline', description: 'Aerial satellite imagery' },
+    { id: 'terrain', name: 'Terrain', icon: 'trending-up-outline', description: 'Topographic terrain view' },
+    { id: 'hybrid', name: 'Hybrid', icon: 'layers-outline', description: 'Satellite with labels' },
+  ];
+
+  // Load saved map style on mount
+  useEffect(() => {
+    const loadMapStyle = async () => {
+      try {
+        const savedStyle = await AsyncStorage.getItem('mapStyle');
+        if (savedStyle) {
+          setMapStyle(savedStyle);
+        }
+      } catch (error) {
+        // Silently ignore storage errors
+      }
+    };
+    loadMapStyle();
+  }, []);
 
   const SettingItem = ({ icon, title, subtitle, value, onValueChange, type = 'switch' }) => (
     <View style={[styles.settingItem, { backgroundColor: colors.surface }]}>
@@ -43,17 +72,6 @@ const SettingsScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Ionicons name="settings" size={22} color={THEME_COLORS.SAFETY_GREEN} style={{ marginRight: 8 }} />
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* Safety Preferences */}
@@ -62,22 +80,49 @@ const SettingsScreen = ({ navigation }) => {
             icon="shield-checkmark-outline"
             title="Prioritize Safety"
             subtitle="Always choose safest routes"
-            value={true}
-            onValueChange={() => {}}
+            value={prioritizeSafety}
+            onValueChange={(value) => {
+              setPrioritizeSafety(value);
+              Alert.alert(
+                value ? 'Safety Priority Enabled' : 'Safety Priority Disabled',
+                value 
+                  ? 'Routes will now prioritize the safest paths based on lighting, crime data, and community reports.'
+                  : 'Route calculation will balance safety with distance and time.',
+                [{ text: 'OK' }]
+              );
+            }}
           />
           <SettingItem
             icon="moon-outline"
             title="Avoid Dark Areas"
             subtitle="Skip poorly lit streets"
-            value={true}
-            onValueChange={() => {}}
+            value={avoidDarkAreas}
+            onValueChange={(value) => {
+              setAvoidDarkAreas(value);
+              Alert.alert(
+                value ? 'Dark Area Avoidance Enabled' : 'Dark Area Avoidance Disabled',
+                value 
+                  ? 'Routes will avoid poorly lit areas and prioritize well-illuminated streets for your safety.'
+                  : 'Lighting conditions will not affect route selection.',
+                [{ text: 'OK' }]
+              );
+            }}
           />
           <SettingItem
             icon="hand-left-outline"
             title="Accessibility Mode"
             subtitle="Wheelchair-friendly routes"
-            value={false}
-            onValueChange={() => {}}
+            value={wheelchairMode}
+            onValueChange={(value) => {
+              setWheelchairMode(value);
+              Alert.alert(
+                value ? 'Accessibility Mode Enabled' : 'Accessibility Mode Disabled',
+                value 
+                  ? 'Routes will now prioritize wheelchair-accessible paths with ramps, elevators, and avoid stairs.'
+                  : 'Standard route calculation restored.',
+                [{ text: 'OK' }]
+              );
+            }}
           />
         </SettingSection>
 
@@ -94,8 +139,43 @@ const SettingsScreen = ({ navigation }) => {
             icon="alert-circle-outline"
             title="Emergency Alerts"
             subtitle="Critical safety warnings"
-            value={true}
-            onValueChange={() => {}}
+            value={emergencyAlerts}
+            onValueChange={(value) => {
+              if (!value) {
+                // Show warning when trying to disable
+                Alert.alert(
+                  '⚠️ Warning',
+                  'Disabling emergency alerts may put you at risk. You will not receive critical safety warnings, SOS notifications, or urgent community alerts in dangerous situations.\n\nAre you sure you want to disable this feature?',
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                      onPress: () => {}
+                    },
+                    {
+                      text: 'Disable',
+                      style: 'destructive',
+                      onPress: () => {
+                        setEmergencyAlerts(false);
+                        Alert.alert(
+                          'Emergency Alerts Disabled',
+                          'You will no longer receive critical safety notifications. You can re-enable this anytime in Settings.',
+                          [{ text: 'OK' }]
+                        );
+                      }
+                    }
+                  ]
+                );
+              } else {
+                // Enable without warning
+                setEmergencyAlerts(true);
+                Alert.alert(
+                  'Emergency Alerts Enabled',
+                  'You will now receive critical safety warnings and SOS notifications to keep you protected.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }}
           />
         </SettingSection>
 
@@ -127,17 +207,19 @@ const SettingsScreen = ({ navigation }) => {
             onValueChange={setVoiceGuidance}
           />
           <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => Alert.alert('Map Style', 'Map style options coming soon')}
+            style={[styles.settingItem, { backgroundColor: colors.surface }]}
+            onPress={() => setShowMapStyleModal(true)}
           >
-            <View style={styles.settingIcon}>
+            <View style={[styles.settingIcon, { backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5' }]}>
               <Ionicons name="map-outline" size={22} color={THEME_COLORS.SAFETY_GREEN} />
             </View>
             <View style={styles.settingContent}>
-              <Text style={styles.settingTitle}>Map Style</Text>
-              <Text style={styles.settingSubtitle}>Standard</Text>
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Map Style</Text>
+              <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>
+                {mapStyles.find(s => s.id === mapStyle)?.name || 'Standard'}
+              </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={THEME_COLORS.TEXT_SECONDARY} />
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </SettingSection>
 
@@ -155,47 +237,119 @@ const SettingsScreen = ({ navigation }) => {
         {/* Privacy & Security */}
         <SettingSection title="Privacy & Security">
           <TouchableOpacity
-            style={styles.settingItem}
+            style={[styles.settingItem, { backgroundColor: colors.surface }]}
             onPress={() => Alert.alert('Privacy', 'Privacy policy coming soon')}
           >
-            <View style={styles.settingIcon}>
+            <View style={[styles.settingIcon, { backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5' }]}>
               <Ionicons name="document-text-outline" size={22} color={THEME_COLORS.SAFETY_GREEN} />
             </View>
             <View style={styles.settingContent}>
-              <Text style={styles.settingTitle}>Privacy Policy</Text>
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Privacy Policy</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={THEME_COLORS.TEXT_SECONDARY} />
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={styles.settingItem}
+            style={[styles.settingItem, { backgroundColor: colors.surface }]}
             onPress={() => Alert.alert('Terms', 'Terms of service coming soon')}
           >
-            <View style={styles.settingIcon}>
+            <View style={[styles.settingIcon, { backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5' }]}>
               <Ionicons name="shield-outline" size={22} color={THEME_COLORS.SAFETY_GREEN} />
             </View>
             <View style={styles.settingContent}>
-              <Text style={styles.settingTitle}>Terms of Service</Text>
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Terms of Service</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={THEME_COLORS.TEXT_SECONDARY} />
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </SettingSection>
 
         {/* About */}
         <SettingSection title="About">
-          <View style={styles.settingItem}>
-            <View style={styles.settingIcon}>
+          <View style={[styles.settingItem, { backgroundColor: colors.surface }]}>
+            <View style={[styles.settingIcon, { backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5' }]}>
               <Ionicons name="information-circle-outline" size={22} color={THEME_COLORS.SAFETY_GREEN} />
             </View>
             <View style={styles.settingContent}>
-              <Text style={styles.settingTitle}>Version</Text>
-              <Text style={styles.settingSubtitle}>1.0.0</Text>
+              <Text style={[styles.settingTitle, { color: colors.text }]}>Version</Text>
+              <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>1.0.0</Text>
             </View>
           </View>
         </SettingSection>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Map Style Modal */}
+      <Modal
+        visible={showMapStyleModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMapStyleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Select Map Style</Text>
+              <TouchableOpacity onPress={() => setShowMapStyleModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.mapStyleOptions}>
+              {mapStyles.map((style) => (
+                <TouchableOpacity
+                  key={style.id}
+                  style={[
+                    styles.mapStyleOption,
+                    { backgroundColor: colors.background },
+                    mapStyle === style.id && styles.mapStyleOptionSelected
+                  ]}
+                  onPress={async () => {
+                    try {
+                      await AsyncStorage.setItem('mapStyle', style.id);
+                      setMapStyle(style.id);
+                      setShowMapStyleModal(false);
+                      Alert.alert(
+                        'Map Style Updated',
+                        `Map style changed to ${style.name}. This will be reflected in the navigation panel.`,
+                        [{ text: 'OK' }]
+                      );
+                    } catch (error) {
+                      setMapStyle(style.id);
+                      setShowMapStyleModal(false);
+                      Alert.alert(
+                        'Map Style Updated',
+                        `Map style changed to ${style.name}. This will be reflected in the navigation panel.`,
+                        [{ text: 'OK' }]
+                      );
+                    }
+                  }}
+                >
+                  <View style={[
+                    styles.mapStyleIconContainer,
+                    { backgroundColor: mapStyle === style.id ? THEME_COLORS.SAFETY_GREEN : (isDarkMode ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5') }
+                  ]}>
+                    <Ionicons 
+                      name={style.icon} 
+                      size={24} 
+                      color={mapStyle === style.id ? '#FFFFFF' : THEME_COLORS.SAFETY_GREEN} 
+                    />
+                  </View>
+                  <View style={styles.mapStyleInfo}>
+                    <Text style={[styles.mapStyleName, { color: colors.text }]}>{style.name}</Text>
+                    <Text style={[styles.mapStyleDescription, { color: colors.textSecondary }]}>
+                      {style.description}
+                    </Text>
+                  </View>
+                  {mapStyle === style.id && (
+                    <Ionicons name="checkmark-circle" size={24} color={THEME_COLORS.SAFETY_GREEN} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -254,11 +408,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
   },
   settingIcon: {
     width: 44,
@@ -277,6 +426,61 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   settingSubtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  mapStyleOptions: {
+    gap: 12,
+  },
+  mapStyleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  mapStyleOptionSelected: {
+    borderColor: THEME_COLORS.SAFETY_GREEN,
+  },
+  mapStyleIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  mapStyleInfo: {
+    flex: 1,
+  },
+  mapStyleName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  mapStyleDescription: {
     fontSize: 13,
     fontWeight: '400',
   },

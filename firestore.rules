@@ -18,6 +18,11 @@ service cloud.firestore {
       // Allow creation if request.auth exists and UIDs match
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update, delete: if isOwner(userId);
+      
+      // Emergency contacts subcollection
+      match /emergency_contacts/{contactId} {
+        allow read, write: if isOwner(userId);
+      }
     }
     
     // Community reports collection

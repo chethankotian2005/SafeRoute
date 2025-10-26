@@ -3,9 +3,15 @@
     ".read": false,
     ".write": false,
     
+    "safety_reports": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp", "type", "severity"]
+    },
+    
     "live_tracking": {
       "$trackingId": {
-        ".read": true,
+        ".read": "auth != null",
         ".write": "auth != null",
         ".indexOn": ["userId", "timestamp"]
       }
@@ -13,8 +19,8 @@
     
     "active_sos": {
       "$sosId": {
-        ".read": "auth != null && (data.child('userId').val() === auth.uid || data.child('sharedWith').child(auth.uid).exists())",
-        ".write": "auth != null && (!data.exists() || data.child('userId').val() === auth.uid)",
+        ".read": "auth != null",
+        ".write": "auth != null",
         ".indexOn": ["userId", "active", "timestamp"]
       }
     },

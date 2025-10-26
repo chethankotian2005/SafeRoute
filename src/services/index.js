@@ -7,6 +7,7 @@ export { default as FirebaseService } from './firebaseService';
 export { default as GoogleMapsService } from './googleMapsService';
 export { default as LocationService } from './locationService';
 export { default as SafetyScoringService } from './safetyScoring';
+export { default as RouteCalculationService } from './routeCalculationService';
 
 // Re-export commonly used functions
 export {
@@ -36,3 +37,13 @@ export {
   calculateSafetyScore,
   rankRoutesBySafety,
 } from './safetyScoring';
+
+export {
+  calculateWalkingRoutes,
+  decodePolyline,
+  calculateDistance,
+  findClosestStep,
+  getNextInstruction,
+  formatDuration,
+  formatDistance,
+} from './routeCalculationService';

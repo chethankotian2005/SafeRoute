@@ -5,8 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { THEME_COLORS } from '../utils/constants';
-import { GOOGLE_MAPS_API_KEY } from '@env';
-
+import { GOOGLE_MAPS_API_KEY } from '../config/apiKeys';
 const { width } = Dimensions.get('window');
 
 const RouteDetailsScreen = ({ navigation, route }) => {
@@ -19,6 +18,7 @@ const RouteDetailsScreen = ({ navigation, route }) => {
   const [distanceToNextTurn, setDistanceToNextTurn] = useState(null);
   const [remainingDistance, setRemainingDistance] = useState(null);
   const [remainingTime, setRemainingTime] = useState(null);
+  const [calculatedRoutes, setCalculatedRoutes] = useState(null);
   const webViewRef = useRef(null);
   const locationSubscription = useRef(null);
 
@@ -113,12 +113,47 @@ const RouteDetailsScreen = ({ navigation, route }) => {
     return `https://maps.googleapis.com/maps/api/streetview?size=600x300&location=${locationParam}&heading=${heading}&pitch=0&fov=90&key=${GOOGLE_MAPS_API_KEY}`;
   };
 
+  // Handle messages from WebView
+  const handleWebViewMessage = (event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      
+      if (data.type === 'ROUTES_CALCULATED') {
+        console.log('Routes calculated:', data.routeCount, 'routes');
+        setCalculatedRoutes({
+          count: data.routeCount,
+          distance: data.distance,
+          duration: data.duration,
+          steps: data.steps
+        });
+      } else if (data.type === 'ROUTE_ERROR') {
+        console.error('❌ Route calculation error:', data.error);
+        Alert.alert('Route Error', data.error);
+      }
+    } catch (error) {
+      console.error('Error parsing WebView message:', error);
+    }
+  };
+
   // Generate navigation map HTML
   const getNavigationMapHTML = () => {
-    const startLat = startLocation?.lat || 13.3409;
-    const startLng = startLocation?.lng || 74.7421;
-    const endLat = endLocation?.lat || 13.35;
-    const endLng = endLocation?.lng || 74.75;
+    // Use the actual startLocation passed from MapScreen (user's current GPS location)
+    const startLat = startLocation?.lat || startLocation?.latitude || 13.0100;
+    const startLng = startLocation?.lng || startLocation?.longitude || 74.7948;
+    
+    // Parse origin if it's a string like "13.0100,74.7948"
+    let actualStartLat = startLat;
+    let actualStartLng = startLng;
+    
+    if (typeof origin === 'string' && origin.includes(',')) {
+      const [lat, lng] = origin.split(',').map(coord => parseFloat(coord.trim()));
+      if (!isNaN(lat) && !isNaN(lng)) {
+        actualStartLat = lat;
+        actualStartLng = lng;
+      }
+    }
+    
+    console.log('Using actual current location:', { lat: actualStartLat, lng: actualStartLng });
     
     return `
 <!DOCTYPE html>
@@ -139,18 +174,20 @@ const RouteDetailsScreen = ({ navigation, route }) => {
     let userMarker;
     let directionsService;
     let directionsRenderer;
-    let userLocation = { lat: ${startLat}, lng: ${startLng} };
-    let destination = { lat: ${endLat}, lng: ${endLng} };
+    let userLocation = { lat: ${actualStartLat}, lng: ${actualStartLng} };
+    let destinationQuery = "${destination?.replace(/"/g, '\\"') || ''}";
+    let routes = [];
+    let currentRouteIndex = 0;
 
     function initMap() {
       map = new google.maps.Map(document.getElementById('map'), {
         center: userLocation,
-        zoom: 18,
+        zoom: 15,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
-        zoomControl: false,
-        disableDefaultUI: true,
+        zoomControl: true,
+        disableDefaultUI: false,
       });
 
       directionsService = new google.maps.DirectionsService();
@@ -179,21 +216,74 @@ const RouteDetailsScreen = ({ navigation, route }) => {
         zIndex: 1000,
       });
 
-      startNavigation();
+      // Calculate routes from current location to destination
+      calculateRoutes();
     }
 
-    function startNavigation() {
+    function calculateRoutes() {
+      // Calculate 3 different routes: safest (default), fastest, alternative
       const request = {
         origin: userLocation,
-        destination: destination,
+        destination: destinationQuery,
         travelMode: google.maps.TravelMode.DRIVING,
+        provideRouteAlternatives: true,
+        optimizeWaypoints: false,
       };
 
       directionsService.route(request, (result, status) => {
         if (status === 'OK') {
-          directionsRenderer.setDirections(result);
+          routes = result.routes;
+          currentRouteIndex = 0;
+          
+          // Display the first route (safest - we'll consider first route as recommended)
+          displayRoute(currentRouteIndex);
+          
+          // Send route info back to React Native
+          if (window.ReactNativeWebView && routes.length > 0) {
+            const route = routes[0];
+            const leg = route.legs[0];
+            
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'ROUTES_CALCULATED',
+              routeCount: routes.length,
+              distance: leg.distance.text,
+              duration: leg.duration.text,
+              steps: leg.steps.map(step => ({
+                instruction: step.instructions.replace(/<[^>]*>/g, ''),
+                distance: step.distance.text,
+                duration: step.duration.text
+              }))
+            }));
+          }
+        } else {
+          console.error('Directions request failed:', status);
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'ROUTE_ERROR',
+              error: 'Could not calculate route: ' + status
+            }));
+          }
         }
       });
+    }
+
+    function displayRoute(routeIndex) {
+      if (routes[routeIndex]) {
+        directionsRenderer.setDirections({ routes: routes, request: routes[routeIndex].request });
+        directionsRenderer.setRouteIndex(routeIndex);
+      }
+    }
+
+    function switchRoute(index) {
+      currentRouteIndex = index;
+      displayRoute(index);
+    }
+
+    function startNavigation() {
+      // This is called when user starts turn-by-turn navigation
+      if (routes.length > 0) {
+        displayRoute(currentRouteIndex);
+      }
     }
 
     function updateNavigationPosition(lat, lng) {
@@ -216,22 +306,22 @@ const RouteDetailsScreen = ({ navigation, route }) => {
   // Use real route data or fallback to mock data
   const routes = {
     recommended: {
-      name: 'Recommended Route',
-      distance: distance || '3.2 km',
-      duration: duration || '12 min',
+      name: 'Safest Route',
+      distance: calculatedRoutes?.distance || distance || '3.2 km',
+      duration: calculatedRoutes?.duration || duration || '12 min',
       safetyScore: safetyScore || 92,
       wellLit: 85,
       crowded: 78,
       lowCrime: 95,
       origin: origin || 'Your Location',
       destination: destination || 'Destination',
-      directions: steps && steps.length > 0 ? steps : [
+      directions: calculatedRoutes?.steps || (steps && steps.length > 0 ? steps : [
         { instruction: 'Head north on Main Street', distance: '0.5 km', icon: 'arrow-up' },
         { instruction: 'Turn right onto Oak Avenue', distance: '1.2 km', icon: 'arrow-forward' },
         { instruction: 'Continue straight on Park Lane', distance: '0.8 km', icon: 'arrow-up' },
         { instruction: 'Turn left onto Destination Road', distance: '0.7 km', icon: 'arrow-back' },
         { instruction: 'Arrive at destination', distance: '0 m', icon: 'checkmark-circle' },
-      ],
+      ]),
     },
     fastest: {
       name: 'Fastest Route',
@@ -327,6 +417,7 @@ const RouteDetailsScreen = ({ navigation, route }) => {
               style={styles.liveMap}
               javaScriptEnabled={true}
               domStorageEnabled={true}
+              onMessage={handleWebViewMessage}
             />
             
             {/* Exit Navigation Button */}

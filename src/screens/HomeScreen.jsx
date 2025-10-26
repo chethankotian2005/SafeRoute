@@ -17,16 +17,16 @@ import {
   Animated,
   Dimensions,
   SafeAreaView,
+  Platform,
+  Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { THEME_COLORS } from '../utils/constants';
 import { useLocation } from '../hooks/useLocation';
 import { useTheme } from '../context/ThemeContext';
-import { useVoiceAssistant } from '../hooks/useVoiceAssistant';
-import { VoiceIndicator } from '../components/VoiceIndicator';
-import { VoiceCommandModal } from '../components/VoiceCommandModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -36,36 +36,76 @@ const HomeScreen = ({ navigation }) => {
   const [prioritizeSafety, setPrioritizeSafety] = useState(true);
   const [accessibilityMode, setAccessibilityMode] = useState(false);
   const [avoidDarkAreas, setAvoidDarkAreas] = useState(true);
-  const [showVoiceCommands, setShowVoiceCommands] = useState(false);
+  const [recentDestinations, setRecentDestinations] = useState([]);
   
-  // Scroll animation for hero section
-  const scrollY = useRef(new Animated.Value(0)).current;
-  
-  // Voice Assistant Hook
-  const { 
-    isListening, 
-    isActive, 
-    isRecording, 
-    toggle: toggleVoiceAssistant,
-    manualCommand 
-  } = useVoiceAssistant({
-    autoStart: false,
-    onCommand: (command) => {
-      console.log('Voice command executed:', command);
-    },
-  });
+  // Handler functions with alert messages
+  const handlePrioritizeSafetyToggle = (value) => {
+    setPrioritizeSafety(value);
+    Alert.alert(
+      value ? 'Safety Priority Enabled' : 'Safety Priority Disabled',
+      value
+        ? 'Routes will now prioritize the safest paths based on lighting, crime data, and community reports.'
+        : 'Route calculation will balance safety with distance and time.',
+      [{ text: 'OK' }]
+    );
+  };
 
-  // Store navigation reference globally for voice commands
-  useEffect(() => {
-    global.navigation = navigation;
-    return () => {
-      global.navigation = null;
-    };
-  }, [navigation]);
+  const handleAccessibilityToggle = (value) => {
+    setAccessibilityMode(value);
+    Alert.alert(
+      value ? 'Accessibility Mode Enabled' : 'Accessibility Mode Disabled',
+      value
+        ? 'Routes will now prioritize wheelchair-accessible paths with ramps, elevators, and avoid stairs.'
+        : 'Standard route calculation restored.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleAvoidDarkAreasToggle = (value) => {
+    setAvoidDarkAreas(value);
+    Alert.alert(
+      value ? 'Dark Area Avoidance Enabled' : 'Dark Area Avoidance Disabled',
+      value
+        ? 'Routes will avoid poorly lit areas and prioritize well-illuminated streets for your safety.'
+        : 'Lighting conditions will not affect route selection.',
+      [{ text: 'OK' }]
+    );
+  };
+  
+  // Scroll animation for hero section (Uber-style)
+  const scrollY = useRef(new Animated.Value(0)).current;
   
   // Pulsing animation for SOS button
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseRingAnim = useRef(new Animated.Value(0)).current;
+  
+  // Load recent destinations from AsyncStorage
+  const loadRecentDestinations = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('recentDestinations');
+      if (stored) {
+        const destinations = JSON.parse(stored);
+        setRecentDestinations(destinations);
+      } else {
+        // If nothing stored, set to empty array
+        setRecentDestinations([]);
+      }
+    } catch (error) {
+      console.log('Error loading recent destinations:', error);
+      setRecentDestinations([]);
+    }
+  };
+
+  // Load recent destinations on mount and when screen comes into focus
+  useEffect(() => {
+    loadRecentDestinations();
+    
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadRecentDestinations();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
   
   useEffect(() => {
     // SOS button scale pulse
@@ -108,22 +148,34 @@ const HomeScreen = ({ navigation }) => {
     };
   }, []);
 
-  // Hero animations based on scroll
+  // Navigate to a specific destination
+  const navigateToDestination = (destination) => {
+    navigation.navigate('Navigate', {
+      selectedDestination: destination,
+    });
+  };
+
+  // Navigate to See All destinations screen
+  const handleSeeAllDestinations = () => {
+    navigation.navigate('RecentDestinations');
+  };
+
+  // Hero animations based on scroll - Uber-style collapse
   const heroTranslateY = scrollY.interpolate({
     inputRange: [0, 200],
-    outputRange: [0, -100],
+    outputRange: [0, -50],
     extrapolate: 'clamp',
   });
 
   const heroOpacity = scrollY.interpolate({
-    inputRange: [0, 150],
+    inputRange: [0, 100],
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
 
   const heroScale = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [1, 0.8],
+    outputRange: [1, 0.9],
     extrapolate: 'clamp',
   });
 
@@ -142,7 +194,7 @@ const HomeScreen = ({ navigation }) => {
           { useNativeDriver: true }
         )}
       >
-        {/* Hero Section - Now scrolls with content */}
+        {/* Hero Section - Now scrolls with content and collapses */}
         <Animated.View 
           style={[
             styles.heroSection,
@@ -156,19 +208,19 @@ const HomeScreen = ({ navigation }) => {
           ]}
         >
           <LinearGradient
-            colors={[THEME_COLORS.BRAND_BLACK, '#2D2D2D']}
+            colors={['#1F2937', '#374151']}
             style={styles.heroGradient}
           >
             {/* Logo Container with Background */}
             <View style={[styles.logoContainer, { backgroundColor: colors.surface }]}>
               <Image 
                 source={require('../assets/logo.png')} 
-                style={styles.logo}
+                style={styles.logoImage}
                 resizeMode="contain"
               />
             </View>
             <Text style={styles.title}>SafeRoute</Text>
-            <Text style={styles.tagline}>Your AI-powered safety companion</Text>
+            <Text style={styles.tagline}>Navigate Safely, Arrive Confidently</Text>
             
             {/* Arch Curve at Bottom */}
             <Svg
@@ -185,19 +237,23 @@ const HomeScreen = ({ navigation }) => {
           </LinearGradient>
         </Animated.View>
 
-        {/* Search Bar - Scrolls with content */}
+        {/* Search Bar - Scrolls with content, overlaps hero */}
         <View style={styles.searchBarContainer}>
-          <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
-            <Ionicons name="search" size={22} color={colors.textSecondary} />
-            <TextInput 
-              placeholder="Where do you want to go?"
-              placeholderTextColor={colors.placeholder}
-              style={[styles.searchInput, { color: colors.text }]}
-            />
-            <TouchableOpacity>
-              <Ionicons name="locate" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={[styles.searchBar, { backgroundColor: colors.surface }]}
+            onPress={() => navigation.navigate('Navigate')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.searchIconContainer}>
+              <Ionicons name="search" size={22} color={colors.textSecondary} />
+            </View>
+            <Text style={[styles.searchPlaceholder, { color: colors.placeholder }]}>
+              Where do you want to go?
+            </Text>
+            <View style={styles.locateIconContainer}>
+              <Ionicons name="navigate-circle" size={22} color={THEME_COLORS.SAFETY_GREEN} />
+            </View>
+          </TouchableOpacity>
         </View>
         {/* Safety Preferences Section */}
         <View style={styles.section}>
@@ -214,7 +270,7 @@ const HomeScreen = ({ navigation }) => {
               title="Prioritize Safety"
               subtitle="Choose safest routes"
               value={prioritizeSafety}
-              onValueChange={setPrioritizeSafety}
+              onValueChange={handlePrioritizeSafetyToggle}
             />
             
             <PreferenceCard
@@ -224,7 +280,7 @@ const HomeScreen = ({ navigation }) => {
               title="Accessibility Mode"
               subtitle="Wheelchair-friendly routes"
               value={accessibilityMode}
-              onValueChange={setAccessibilityMode}
+              onValueChange={handleAccessibilityToggle}
             />
             
             <PreferenceCard
@@ -234,36 +290,9 @@ const HomeScreen = ({ navigation }) => {
               title="Avoid Dark Areas"
               subtitle="Skip poorly lit streets"
               value={avoidDarkAreas}
-              onValueChange={setAvoidDarkAreas}
+              onValueChange={handleAvoidDarkAreasToggle}
             />
           </View>
-        </View>
-
-        {/* Voice Assistant Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderWithAction}>
-            <View style={styles.sectionHeaderLeft}>
-              <Ionicons name="mic" size={18} color={THEME_COLORS.SAFETY_GREEN} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Safety Assistant</Text>
-            </View>
-            <TouchableOpacity onPress={() => setShowVoiceCommands(true)}>
-              <Text style={[styles.seeAllText, { color: colors.primary }]}>View Commands</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Expo Go Notice */}
-          <View style={[styles.infoBox, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-            <Ionicons name="information-circle" size={16} color={THEME_COLORS.WARNING_ORANGE} />
-            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-              Voice recognition requires dev build. Use "View Commands" to test features manually.
-            </Text>
-          </View>
-          
-          <VoiceIndicator 
-            isListening={isActive && isListening} 
-            isRecording={isRecording}
-            onToggle={toggleVoiceAssistant} 
-          />
         </View>
 
         {/* Recent Destinations Section */}
@@ -273,26 +302,34 @@ const HomeScreen = ({ navigation }) => {
               <Ionicons name="time" size={18} color={colors.textSecondary} />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Destinations</Text>
             </View>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleSeeAllDestinations}>
               <Text style={[styles.seeAllText, { color: colors.primary }]}>See All</Text>
             </TouchableOpacity>
           </View>
           
-          <RecentDestinationCard
-            name="NITK College Campus"
-            safetyScore={8}
-            distance="2.3 km"
-            lastVisit="Last visited today"
-            onPress={() => navigation.navigate('Map')}
-          />
-          
-          <RecentDestinationCard
-            name="City Shopping Mall"
-            safetyScore={9}
-            distance="4.1 km"
-            lastVisit="Last visited yesterday"
-            onPress={() => navigation.navigate('Map')}
-          />
+          {recentDestinations.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <Ionicons name="location-outline" size={48} color={colors.disabled} />
+              <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+                No recent destinations yet
+              </Text>
+              <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
+                Start navigating to see your history here
+              </Text>
+            </View>
+          ) : (
+            recentDestinations.slice(0, 3).map((dest, index) => (
+              <RecentDestinationCard
+                key={index}
+                name={dest.name}
+                address={dest.address}
+                safetyScore={dest.safetyScore || 7}
+                distance={dest.distance || 'N/A'}
+                lastVisit={dest.lastVisit || 'Recently'}
+                onPress={() => navigateToDestination(dest)}
+              />
+            ))
+          )}
         </View>
 
         {/* Quick Stats Section */}
@@ -312,25 +349,8 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </Animated.ScrollView>
 
-      {/* Fixed Bottom Button Row - Find Safe Route & SOS */}
+      {/* Fixed Bottom Button Row - SOS */}
       <View style={styles.fixedButtonContainer}>
-        {/* Find Safe Route Button */}
-        <TouchableOpacity
-          style={styles.fixedFindRouteButton}
-          onPress={() => navigation.navigate('Map')}
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={[THEME_COLORS.SAFE_GRADIENT_START, THEME_COLORS.SAFE_GRADIENT_END]}
-            style={styles.fixedButtonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons name="navigate-circle" size={22} color="#FFFFFF" />
-            <Text style={styles.fixedButtonText}>Find Safe Route</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
         {/* SOS Button */}
         <Animated.View 
           style={[
@@ -368,19 +388,13 @@ const HomeScreen = ({ navigation }) => {
               colors={['#EF4444', '#DC2626']}
               style={styles.sosGradient}
             >
+              <Ionicons name="warning" size={24} color="#FFFFFF" style={styles.sosIcon} />
               <Text style={styles.sosText}>SOS</Text>
-              <Text style={styles.sosSubtext}>911</Text>
+              <Text style={styles.sosSubtext}>112</Text>
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
       </View>
-
-      {/* Voice Command Modal */}
-      <VoiceCommandModal
-        visible={showVoiceCommands}
-        onClose={() => setShowVoiceCommands(false)}
-        onTestCommand={manualCommand}
-      />
     </SafeAreaView>
   );
 };
@@ -409,7 +423,7 @@ const PreferenceCard = ({ icon, iconColor, iconBg, title, subtitle, value, onVal
 };
 
 // Recent Destination Card Component
-const RecentDestinationCard = ({ name, safetyScore, distance, lastVisit, onPress }) => {
+const RecentDestinationCard = ({ name, address, safetyScore, distance, lastVisit, onPress }) => {
   const { colors } = useTheme();
   return (
     <TouchableOpacity style={[styles.recentCard, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
@@ -418,11 +432,12 @@ const RecentDestinationCard = ({ name, safetyScore, distance, lastVisit, onPress
       </View>
       <View style={styles.recentContent}>
         <Text style={[styles.recentName, { color: colors.text }]}>{name}</Text>
+        <Text style={[styles.recentAddress, { color: colors.textSecondary }]}>{address}</Text>
         <View style={styles.recentScoreRow}>
           <View style={styles.safetyBadge}>
             <Text style={styles.safetyBadgeText}>{safetyScore}/10</Text>
           </View>
-          <Text style={[styles.recentDetails, { color: colors.textSecondary }]}>{distance} � {lastVisit}</Text>
+          <Text style={[styles.recentDetails, { color: colors.textSecondary }]}>{distance} • {lastVisit}</Text>
         </View>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
@@ -435,7 +450,9 @@ const StatCard = ({ icon, iconColor, label, value }) => {
   const { colors } = useTheme();
   return (
     <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
-      <Ionicons name={icon} size={20} color={iconColor} />
+      <View style={[styles.statIconContainer, { backgroundColor: `${iconColor}15` }]}>
+        <Ionicons name={icon} size={22} color={iconColor} />
+      </View>
       <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
       <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
     </View>
@@ -446,16 +463,16 @@ const StatCard = ({ icon, iconColor, label, value }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME_COLORS.BRAND_BLACK,
+    backgroundColor: '#F9FAFB',
   },
   
-  // Hero Section
+  // Hero Section - Uber-style collapsing header
   heroSection: {
     position: 'relative',
-    backgroundColor: THEME_COLORS.BRAND_BLACK,
+    overflow: 'hidden',
   },
   heroGradient: {
-    paddingTop: 60,
+    paddingTop: 40,
     paddingBottom: 50,
     paddingHorizontal: 24,
     alignItems: 'center',
@@ -465,31 +482,32 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 100,
     height: 100,
-    borderRadius: 16,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  logo: {
+  logoImage: {
     width: 80,
     height: 80,
   },
   title: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 6,
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   tagline: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '400',
-    color: '#FFFFFF',
-    opacity: 0.9,
+    color: '#D1D5DB',
+    textAlign: 'center',
   },
   archCurve: {
     position: 'absolute',
@@ -498,30 +516,48 @@ const styles = StyleSheet.create({
     right: 0,
   },
   
-  // Search Bar
+  // Search Bar - Overlaps hero like Uber
   searchBarContainer: {
     paddingHorizontal: 16,
     marginTop: -30,
     zIndex: 10,
+    marginBottom: 20,
   },
   searchBar: {
     borderRadius: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    shadowColor: '#000',
+    shadowColor: THEME_COLORS.SAFETY_GREEN,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
   },
-  searchInput: {
+  searchIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locateIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchPlaceholder: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '400',
-    color: THEME_COLORS.TEXT_PRIMARY,
+    fontWeight: '500',
   },
   
   // Scroll View
@@ -529,34 +565,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 24,
-    paddingHorizontal: 16,
     paddingBottom: 200,
   },
   
   // Sections
   section: {
     marginBottom: 24,
+    paddingHorizontal: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionHeaderWithAction: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   
   // Info Box
   infoBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 12,
@@ -573,7 +608,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     lineHeight: 20,
   },
   seeAllText: {
@@ -581,62 +616,88 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Preferences Container
+  // Preferences Container - Shows all 3 cards clearly
   preferencesContainer: {
     gap: 12,
   },
   
-  // Preference Cards
+  // Preference Cards - Clean design with enhanced shadows
   preferenceCard: {
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  preferenceIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
-  },
-  preferenceIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
   },
   preferenceContent: {
     flex: 1,
   },
   preferenceTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   preferenceSubtitle: {
     fontSize: 13,
     fontWeight: '400',
   },
   
+  // Empty state
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  
   // Recent Destinations
   recentCard: {
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+    borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   recentIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#D1FAE5',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ECFDF5',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -645,30 +706,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   recentName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  recentAddress: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 6,
   },
   recentScoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   safetyBadge: {
     backgroundColor: THEME_COLORS.SAFETY_GREEN,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   safetyBadgeText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   recentDetails: {
     fontSize: 12,
     fontWeight: '400',
-    color: THEME_COLORS.TEXT_SECONDARY,
   },
   
   // Stats Section
@@ -676,34 +741,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 20,
+    paddingHorizontal: 16,
   },
   statCard: {
     flex: 1,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  statIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    marginTop: 8,
+    marginTop: 4,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    fontWeight: '400',
+    fontWeight: '500',
     textAlign: 'center',
   },
   
-  // Fixed Bottom Buttons
+  // Fixed Bottom Buttons - Doesn't block content
   fixedButtonContainer: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 30,
     left: 16,
     right: 16,
     flexDirection: 'row',
@@ -715,74 +791,83 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: THEME_COLORS.SAFETY_GREEN,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowRadius: 12,
+    elevation: 8,
   },
   fixedButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    gap: 10,
   },
   fixedButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   
-  // SOS Button Wrapper
+  // SOS Button Wrapper - Floating, not blocking
   sosButtonWrapper: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   
-  // Pulsing Ring
+  // Pulsing Ring - Clear animation
   pulseRing: {
     position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 2,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    borderWidth: 3,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
   },
   
-  // SOS Button
+  // SOS Button - Clean and prominent
   sosButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 3,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 4,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
     shadowColor: THEME_COLORS.ALERT_RED,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
   },
   sosGradient: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  sosIcon: {
+    marginBottom: 2,
   },
   sosText: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   sosSubtext: {
     fontSize: 9,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFFFFF',
     marginTop: 1,
     letterSpacing: 0.5,
+    opacity: 0.9,
   },
 });
 

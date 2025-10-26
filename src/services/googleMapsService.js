@@ -4,7 +4,7 @@
  */
 
 import axios from 'axios';
-import { GOOGLE_MAPS_API_KEY } from '@env';
+import { GOOGLE_MAPS_API_KEY } from '../config/apiKeys';
 import { SAFE_SPOT_TYPES } from '../utils/constants';
 import { cacheData, getCachedData } from '../utils/helpers';
 
@@ -141,6 +141,51 @@ export const geocodeAddress = async (address) => {
   } catch (error) {
     console.error('Error geocoding address:', error);
     throw error;
+  }
+};
+
+/**
+ * Get autocomplete suggestions for a search query
+ * @param {string} input - User's search input
+ * @param {Object} location - User's current location for bias
+ * @returns {Array} Array of place predictions
+ */
+export const getPlaceAutocomplete = async (input, location = null) => {
+  try {
+    if (!input || input.length < 2) {
+      return [];
+    }
+
+    const params = {
+      input,
+      key: GOOGLE_MAPS_API_KEY,
+      types: 'establishment|geocode', // All types of places and addresses
+    };
+
+    // Bias results to user's location if available
+    if (location) {
+      params.location = `${location.latitude},${location.longitude}`;
+      params.radius = 50000; // 50km radius
+    }
+
+    const response = await axios.get(`${MAPS_BASE_URL}/place/autocomplete/json`, {
+      params,
+    });
+
+    if (response.data.status !== 'OK' && response.data.status !== 'ZERO_RESULTS') {
+      console.error('Autocomplete API error:', response.data.status);
+      return [];
+    }
+
+    return response.data.predictions.map((prediction) => ({
+      placeId: prediction.place_id,
+      description: prediction.description,
+      mainText: prediction.structured_formatting.main_text,
+      secondaryText: prediction.structured_formatting.secondary_text,
+    }));
+  } catch (error) {
+    console.error('Error getting autocomplete:', error);
+    return [];
   }
 };
 
@@ -335,6 +380,7 @@ export default {
   getRoutes,
   getNearbySafeSpots,
   geocodeAddress,
+  getPlaceAutocomplete,
   reverseGeocode,
   getStreetViewImage,
   getStreetViewMetadata,

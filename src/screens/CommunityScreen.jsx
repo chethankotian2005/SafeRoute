@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -12,72 +12,147 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { THEME_COLORS } from '../utils/constants';
 import { useTheme } from '../context/ThemeContext';
+import { getCommunityReportsNearLocation, upvoteCommunityReport } from '../services/firebaseService';
+import { useLocation } from '../hooks/useLocation';
 
 const CommunityScreen = ({ navigation }) => {
   const { colors } = useTheme();
+  const { location } = useLocation();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [radiusFilter, setRadiusFilter] = useState('5km');
+  const [radiusKm, setRadiusKm] = useState(5);
+  const [showRadiusPicker, setShowRadiusPicker] = useState(false);
+  const [showSortPicker, setShowSortPicker] = useState(false);
   const [sortBy, setSortBy] = useState('recent');
   const [refreshing, setRefreshing] = useState(false);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const alerts = [
-    {
-      id: 1,
-      type: 'warning',
-      title: 'Poor Street Lighting',
-      location: 'MG Road, Near Metro',
-      time: '2 hours ago',
-      severity: 'medium',
-      icon: 'warning',
-      color: THEME_COLORS.WARNING_ORANGE,
-      reportedBy: 'Sarah K.',
-      upvotes: 12,
-      verified: false,
-      hasPhoto: true,
-    },
-    {
-      id: 2,
-      type: 'danger',
-      title: 'Harassment Reported',
-      location: 'College Street Junction',
-      time: '5 hours ago',
-      severity: 'high',
-      icon: 'alert-circle',
-      color: THEME_COLORS.ALERT_RED,
-      reportedBy: 'John D.',
-      upvotes: 28,
-      verified: true,
-      hasPhoto: false,
-    },
-    {
-      id: 3,
-      type: 'safe',
-      title: 'Well-Lit Safe Path',
-      location: 'Beach Road Walkway',
-      time: '1 day ago',
-      severity: 'low',
-      icon: 'checkmark-circle',
-      color: THEME_COLORS.SAFETY_GREEN,
-      reportedBy: 'Mike R.',
-      upvotes: 45,
-      verified: true,
-      hasPhoto: true,
-    },
-    {
-      id: 4,
-      type: 'warning',
-      title: 'Suspicious Activity',
-      location: 'Park Avenue',
-      time: '2 days ago',
-      severity: 'medium',
-      icon: 'eye',
-      color: THEME_COLORS.WARNING_ORANGE,
-      reportedBy: 'Emma L.',
-      upvotes: 7,
-      verified: false,
-      hasPhoto: false,
-    },
-  ];
+  // Fetch community reports on component mount and when location changes
+  useEffect(() => {
+    if (location) {
+      fetchCommunityReports();
+    }
+  }, [location, radiusKm]);
+
+  const fetchCommunityReports = async () => {
+    try {
+      setLoading(true);
+      const reports = await getCommunityReportsNearLocation(location, radiusKm);
+      
+      // Transform Firebase data to UI format
+      const transformedAlerts = reports.map(report => ({
+        id: report.id,
+        type: getReportType(report.type),
+        title: report.title || getTitleFromType(report.type),
+        location: buildLocationLine(report),
+        time: getTimeAgo(report.timestamp),
+        severity: getSeverityFromType(report.type),
+        icon: getIconFromType(report.type),
+        color: getColorFromType(report.type),
+        reportedBy: 'Anonymous', // Firebase doesn't store user names in reports
+        upvotes: report.upvotes || 0,
+        verified: report.verified || false,
+        hasPhoto: report.imageUrl ? true : false,
+        imageUrl: report.imageUrl,
+        reportData: report, // Keep original data for actions
+        distanceKm: typeof report.distanceKm === 'number' ? report.distanceKm : null,
+      }));
+      
+      setAlerts(transformedAlerts);
+    } catch (error) {
+      console.error('Error fetching community reports:', error);
+      Alert.alert('Error', 'Failed to load community reports');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Build a user-friendly location line with distance if available
+  const buildLocationLine = (report) => {
+    const label = report.locationDescription || 'Location not specified';
+    if (typeof report.distanceKm === 'number') {
+      const d = report.distanceKm < 1 ? `${Math.round(report.distanceKm * 1000)} m` : `${report.distanceKm.toFixed(1)} km`;
+      return `${d} away • ${label}`;
+    }
+    return label;
+  };
+
+  // Helper functions to transform Firebase data
+  const getReportType = (type) => {
+    const typeMap = {
+      'harassment': 'danger',
+      'lighting': 'warning',
+      'suspicious': 'warning',
+      'safe': 'safe',
+      'accident': 'danger',
+      'other': 'warning'
+    };
+    return typeMap[type] || 'warning';
+  };
+
+  const getTitleFromType = (type) => {
+    const titleMap = {
+      'harassment': 'Harassment Reported',
+      'lighting': 'Poor Street Lighting',
+      'suspicious': 'Suspicious Activity',
+      'safe': 'Safe Area Reported',
+      'accident': 'Accident Reported',
+      'other': 'Incident Reported'
+    };
+    return titleMap[type] || 'Incident Reported';
+  };
+
+  const getSeverityFromType = (type) => {
+    const severityMap = {
+      'harassment': 'high',
+      'accident': 'high',
+      'lighting': 'medium',
+      'suspicious': 'medium',
+      'safe': 'low',
+      'other': 'medium'
+    };
+    return severityMap[type] || 'medium';
+  };
+
+  const getIconFromType = (type) => {
+    const iconMap = {
+      'harassment': 'alert-circle',
+      'lighting': 'bulb-outline',
+      'suspicious': 'eye-outline',
+      'safe': 'checkmark-circle',
+      'accident': 'medical',
+      'other': 'ellipsis-horizontal-circle'
+    };
+    return iconMap[type] || 'warning';
+  };
+
+  const getColorFromType = (type) => {
+    const colorMap = {
+      'harassment': THEME_COLORS.ALERT_RED,
+      'accident': THEME_COLORS.ALERT_RED,
+      'lighting': THEME_COLORS.WARNING_ORANGE,
+      'suspicious': THEME_COLORS.WARNING_ORANGE,
+      'safe': THEME_COLORS.SAFETY_GREEN,
+      'other': THEME_COLORS.ACCENT_BLUE
+    };
+    return colorMap[type] || THEME_COLORS.WARNING_ORANGE;
+  };
+
+  const getTimeAgo = (timestamp) => {
+    if (!timestamp) return 'Unknown time';
+    
+    const now = new Date();
+    const reportTime = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const diffMs = now - reportTime;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return reportTime.toLocaleDateString();
+  };
 
   const getSeverityBadge = (severity) => {
     const badges = {
@@ -90,7 +165,55 @@ const CommunityScreen = ({ navigation }) => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+    fetchCommunityReports().finally(() => setRefreshing(false));
+  };
+
+  const sortAlerts = (alertsToSort) => {
+    const sorted = [...alertsToSort];
+    if (sortBy === 'recent') {
+      return sorted.sort((a, b) => {
+        const timeA = a.reportData?.timestamp?.toDate?.() || new Date(a.reportData?.timestamp);
+        const timeB = b.reportData?.timestamp?.toDate?.() || new Date(b.reportData?.timestamp);
+        return timeB - timeA; // Most recent first
+      });
+    } else if (sortBy === 'verified') {
+      return sorted.sort((a, b) => {
+        if (a.verified === b.verified) return 0;
+        return a.verified ? -1 : 1; // Verified first
+      });
+    } else if (sortBy === 'nearby') {
+      return sorted.sort((a, b) => {
+        const distA = a.distanceKm !== null ? a.distanceKm : Infinity;
+        const distB = b.distanceKm !== null ? b.distanceKm : Infinity;
+        return distA - distB; // Closest first
+      });
+    }
+    return sorted;
+  };
+
+  const handleUpvote = async (reportId) => {
+    try {
+      await upvoteCommunityReport(reportId);
+      // Update local state to reflect the upvote
+      setAlerts(prevAlerts => 
+        prevAlerts.map(alert => 
+          alert.id === reportId 
+            ? { ...alert, upvotes: alert.upvotes + 1 }
+            : alert
+        )
+      );
+    } catch (error) {
+      console.error('Error upvoting report:', error);
+      Alert.alert('Error', 'Failed to upvote report');
+    }
+  };
+
+  const handleViewOnMap = (alert) => {
+    // Navigate to map screen with the report location
+    navigation.navigate('Map', {
+      focusLocation: alert.reportData.location,
+      reportId: alert.id
+    });
   };
 
   return (
@@ -99,7 +222,7 @@ const CommunityScreen = ({ navigation }) => {
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <View style={styles.headerContent}>
           <Ionicons name="people-circle" size={28} color={THEME_COLORS.SAFETY_GREEN} />
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Community Alerts</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Community</Text>
         </View>
         <TouchableOpacity
           style={styles.reportButton}
@@ -111,13 +234,19 @@ const CommunityScreen = ({ navigation }) => {
 
       {/* Location & Sort Filters */}
       <View style={[styles.topFilters, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity style={[styles.topFilterButton, { backgroundColor: colors.background }]}>
+        <TouchableOpacity 
+          style={[styles.topFilterButton, { backgroundColor: colors.background }]}
+          onPress={() => setShowRadiusPicker(true)}
+        > 
           <Ionicons name="location-outline" size={16} color={THEME_COLORS.SAFETY_GREEN} />
           <Text style={[styles.topFilterText, { color: colors.text }]}>Within {radiusFilter}</Text>
           <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         
-        <TouchableOpacity style={[styles.topFilterButton, { backgroundColor: colors.background }]}>
+        <TouchableOpacity 
+          style={[styles.topFilterButton, { backgroundColor: colors.background }]}
+          onPress={() => setShowSortPicker(true)}
+        >
           <Ionicons name="swap-vertical" size={16} color={colors.textSecondary} />
           <Text style={[styles.topFilterText, { color: colors.text }]}>
             {sortBy === 'recent' ? 'Recent' : sortBy === 'verified' ? 'Most Verified' : 'Nearby'}
@@ -217,8 +346,15 @@ const CommunityScreen = ({ navigation }) => {
           </TouchableOpacity>
         </ScrollView>
 
-        {alerts.length > 0 ? (
-          alerts.map((alert) => {
+        {loading ? (
+          <View style={styles.loadingState}>
+            <Ionicons name="refresh-circle" size={40} color={THEME_COLORS.SAFETY_GREEN} />
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading community reports...</Text>
+          </View>
+        ) : alerts.length > 0 ? (
+          sortAlerts(alerts)
+            .filter(alert => selectedFilter === 'all' || alert.type === selectedFilter)
+            .map((alert) => {
             const badge = getSeverityBadge(alert.severity);
             return (
               <View
@@ -266,22 +402,26 @@ const CommunityScreen = ({ navigation }) => {
                 </View>
 
                 {/* Photo if available */}
-                {alert.hasPhoto && (
+                {alert.hasPhoto && alert.imageUrl && (
                   <View style={styles.alertPhoto}>
-                    <View style={[styles.photoPlaceholder, { backgroundColor: colors.disabled }]}>
-                      <Ionicons name="image" size={24} color={colors.textSecondary} />
-                    </View>
+                    <Image source={{ uri: alert.imageUrl }} style={styles.alertImage} />
                   </View>
                 )}
 
                 {/* Action Buttons */}
                 <View style={[styles.alertActions, { borderTopColor: colors.border }]}>
-                  <TouchableOpacity style={styles.actionButton}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleUpvote(alert.id)}
+                  >
                     <Ionicons name="arrow-up-circle-outline" size={20} color={THEME_COLORS.SAFETY_GREEN} />
                     <Text style={[styles.actionButtonText, { color: colors.text }]}>{alert.upvotes} confirms</Text>
                   </TouchableOpacity>
                   
-                  <TouchableOpacity style={styles.actionButton}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleViewOnMap(alert)}
+                  >
                     <Ionicons name="map-outline" size={20} color={colors.primary} />
                     <Text style={[styles.actionButtonText, { color: colors.text }]}>View on Map</Text>
                   </TouchableOpacity>
@@ -310,6 +450,74 @@ const CommunityScreen = ({ navigation }) => {
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
+
+      {/* Sort Picker Modal */}
+      {showSortPicker && (
+        <View style={styles.radiusOverlay}>
+          <View style={[styles.radiusSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.radiusTitle, { color: colors.text }]}>Sort by</Text>
+            <View style={styles.radiusOptionsRow}>
+              <TouchableOpacity
+                style={[styles.radiusPill, sortBy === 'recent' && styles.radiusPillActive]}
+                onPress={() => {
+                  setSortBy('recent');
+                  setShowSortPicker(false);
+                }}
+              >
+                <Text style={[styles.radiusPillText, sortBy === 'recent' && styles.radiusPillTextActive]}>Recent</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.radiusPill, sortBy === 'verified' && styles.radiusPillActive]}
+                onPress={() => {
+                  setSortBy('verified');
+                  setShowSortPicker(false);
+                }}
+              >
+                <Text style={[styles.radiusPillText, sortBy === 'verified' && styles.radiusPillTextActive]}>Most Verified</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.radiusPill, sortBy === 'nearby' && styles.radiusPillActive]}
+                onPress={() => {
+                  setSortBy('nearby');
+                  setShowSortPicker(false);
+                }}
+              >
+                <Text style={[styles.radiusPillText, sortBy === 'nearby' && styles.radiusPillTextActive]}>Nearby</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.radiusClose} onPress={() => setShowSortPicker(false)}>
+              <Text style={[styles.radiusCloseText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Radius Picker Modal */}
+      {showRadiusPicker && (
+        <View style={styles.radiusOverlay}>
+          <View style={[styles.radiusSheet, { backgroundColor: colors.surface, borderColor: colors.border }] }>
+            <Text style={[styles.radiusTitle, { color: colors.text }]}>Show alerts within</Text>
+            <View style={styles.radiusOptionsRow}>
+              { [1,2,3,5,10,20].map((km) => (
+                <TouchableOpacity
+                  key={km}
+                  style={[styles.radiusPill, radiusKm === km && styles.radiusPillActive]}
+                  onPress={() => {
+                    setRadiusKm(km);
+                    setRadiusFilter(`${km}km`);
+                    setShowRadiusPicker(false);
+                  }}
+                >
+                  <Text style={[styles.radiusPillText, radiusKm === km && styles.radiusPillTextActive]}>{km} km</Text>
+                </TouchableOpacity>
+              )) }
+            </View>
+            <TouchableOpacity style={styles.radiusClose} onPress={() => setShowRadiusPicker(false)}>
+              <Text style={[styles.radiusCloseText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -521,6 +729,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  alertImage: {
+    width: '100%',
+    height: 100,
+    borderRadius: 8,
+  },
   alertActions: {
     flexDirection: 'row',
     paddingTop: 10,
@@ -538,6 +751,16 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
   },
   emptyState: {
     flex: 1,
@@ -573,6 +796,63 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
+  },
+  // Radius picker styles
+  radiusOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  radiusSheet: {
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderTopWidth: 1,
+  },
+  radiusTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  radiusOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  radiusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  radiusPillActive: {
+    backgroundColor: '#DCFCE7',
+    borderColor: THEME_COLORS.SAFETY_GREEN,
+  },
+  radiusPillText: {
+    fontSize: 13,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  radiusPillTextActive: {
+    color: THEME_COLORS.SAFETY_GREEN,
+  },
+  radiusClose: {
+    marginTop: 14,
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  radiusCloseText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

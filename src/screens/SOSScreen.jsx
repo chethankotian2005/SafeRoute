@@ -1,18 +1,148 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ScrollView, ActivityIndicator, Share, Platform, Modal, PermissionsAndroid } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { THEME_COLORS } from '../utils/constants';
+import { auth } from '../config/firebaseConfig';
+import firebaseService from '../services/firebaseService';
+import sosNotificationService from '../services/sosNotificationService';
+import { getCurrentLocation } from '../services/locationService';
 
 const SOSScreen = ({ navigation }) => {
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
+  const [sosAlertId, setSosAlertId] = useState(null);
+  const [emergencyContacts, setEmergencyContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const countdownTimerRef = useRef(null);
+  const user = auth.currentUser;
 
-  const emergencyContacts = [
-    { name: 'Police', number: '100', icon: 'shield' },
-    { name: 'Ambulance', number: '108', icon: 'medical' },
-    { name: 'Fire', number: '101', icon: 'flame' },
-    { name: 'Women Helpline', number: '1091', icon: 'woman' },
-  ];
+  // Get current location on mount
+  useEffect(() => {
+    loadEmergencyContacts();
+    loadCurrentLocation();
+  }, []);
+
+  const loadCurrentLocation = async () => {
+    try {
+      const location = await getCurrentLocation();
+      setCurrentLocation(location);
+    } catch (error) {
+      console.error('Error getting location:', error);
+    }
+  };
+
+  const loadEmergencyContacts = async () => {
+    try {
+      setLoadingContacts(true);
+      const contacts = await firebaseService.getEmergencyContacts(user.uid);
+      
+      // Add default emergency services if no contacts exist
+      const defaultServices = [
+        { name: 'Police', number: '100', icon: 'shield' },
+        { name: 'Ambulance', number: '108', icon: 'medical' },
+        { name: 'Fire', number: '101', icon: 'flame' },
+        { name: 'Women Helpline', number: '1091', icon: 'woman' },
+      ];
+      
+      setEmergencyContacts([...defaultServices, ...(contacts || [])]);
+    } catch (error) {
+      console.error('Error loading emergency contacts:', error);
+      // Fallback to default services only
+      const defaultServices = [
+        { name: 'Police', number: '100', icon: 'shield' },
+        { name: 'Ambulance', number: '108', icon: 'medical' },
+        { name: 'Fire', number: '101', icon: 'flame' },
+        { name: 'Women Helpline', number: '1091', icon: 'woman' },
+      ];
+      setEmergencyContacts(defaultServices);
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  // Choose a number to call. If there are user/emergency contacts, pick a random one; else default to 112
+  const pickSOSNumber = () => {
+    try {
+      const valid = (emergencyContacts || []).filter(c => typeof c.number === 'string' && c.number.replace(/\D/g, '').length >= 3);
+      if (valid.length > 0) {
+        const idx = Math.floor(Math.random() * valid.length);
+        return valid[idx].number;
+      }
+    } catch (e) {}
+    return '112';
+  };
+
+  // Attempt to place an immediate phone call when possible (Android native module), otherwise open the dialer
+  const initiateCall = async (number) => {
+    const sanitized = number.toString();
+
+    if (Platform.OS === 'android') {
+      try {
+        // Request call permission
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CALL_PHONE
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          // Use Linking to initiate call
+          await Linking.openURL(`tel:${sanitized}`);
+          return;
+        }
+      } catch (e) {
+        console.error('Error requesting call permission:', e);
+        // Fall through to other strategies
+      }
+
+      // Optional fallback to a native module if the app has it
+      try {
+        // eslint-disable-next-line global-require
+        const ImmediatePhoneCall = require('react-native-immediate-phone-call');
+        if (ImmediatePhoneCall?.immediatePhoneCall) {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.CALL_PHONE
+          );
+          if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+            ImmediatePhoneCall.immediatePhoneCall(sanitized);
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Fallback: open the dialer with number prefilled
+    try {
+      await Linking.openURL(`tel:${sanitized}`);
+    } catch (err) {
+      Alert.alert('Call Failed', 'Unable to initiate the call on this device.');
+    }
+  };
+
+  const startCountdownAndCall = () => {
+    if (showCountdown) return;
+    setIsEmergencyActive(true);
+    setShowCountdown(true);
+    setCountdown(3);
+
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+
+    let t = 3;
+    countdownTimerRef.current = setInterval(() => {
+      t -= 1;
+      setCountdown(t);
+      if (t <= 0) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+        setShowCountdown(false);
+        const number = pickSOSNumber();
+        initiateCall(number);
+      }
+    }, 1000);
+  };
 
   const handleEmergencyCall = (number, name) => {
     Alert.alert(
@@ -31,27 +161,133 @@ const SOSScreen = ({ navigation }) => {
     );
   };
 
-  const handleSOSActivation = () => {
+  const handleQuickSOS = async () => {
+    try {
+      // Get current location
+      let location = currentLocation;
+      if (!location) {
+        location = await getCurrentLocation();
+        setCurrentLocation(location);
+      }
+
+      // Share location via SMS/WhatsApp
+      const locationUrl = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+      const message = `EMERGENCY! I need help!\n\nMy current location:\n${locationUrl}\n\nSent from SafeRoute`;
+
+      // Show options
+      Alert.alert(
+        'Emergency Actions',
+        'Choose your action:',
+        [
+          {
+            text: 'Call Police (100)',
+            onPress: () => {
+              Linking.openURL('tel:100');
+            },
+          },
+          {
+            text: 'Share Location',
+            onPress: async () => {
+              try {
+                await Share.share({
+                  message: message,
+                  title: 'Emergency Location',
+                });
+              } catch (error) {
+                console.error('Error sharing:', error);
+              }
+            },
+          },
+          {
+            text: 'Both',
+            style: 'destructive',
+            onPress: async () => {
+              // Call police
+              Linking.openURL('tel:100');
+              
+              // Share location after a delay
+              setTimeout(async () => {
+                try {
+                  await Share.share({
+                    message: message,
+                    title: 'Emergency Location',
+                  });
+                } catch (error) {
+                  console.error('Error sharing:', error);
+                }
+              }, 1000);
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    } catch (error) {
+      console.error('Quick SOS error:', error);
+      Alert.alert('Error', 'Could not get your location. Please check permissions.');
+    }
+  };
+
+  const handleSOSActivation = async () => {
     if (!isEmergencyActive) {
       Alert.alert(
         'Activate SOS',
-        'This will send your location to emergency contacts and call 100.',
+        'This will send your location to emergency contacts and notify nearby app users.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Activate',
             style: 'destructive',
-            onPress: () => {
-              setIsEmergencyActive(true);
-              Alert.alert('SOS Activated', 'Emergency alert sent to your contacts!');
-              // TODO: Implement actual SOS functionality
+            onPress: async () => {
+              try {
+                setIsEmergencyActive(true);
+
+                // Get current location
+                const currentLocation = await getCurrentLocation();
+
+                // Create SOS alert in Firebase (defaults to 0.5 km radius)
+                const alertId = await firebaseService.createSOSAlert(currentLocation, emergencyContacts);
+                setSosAlertId(alertId);
+
+                // Send notification to this user that SOS was activated
+                await sosNotificationService.sendSOSActivatedNotification();
+
+                Alert.alert('SOS ACTIVATED', 'Your emergency alert has been sent to your contacts and nearby users!');
+              } catch (err) {
+                console.error('Failed to activate SOS:', err);
+                Alert.alert('Error', 'Could not activate SOS. Please ensure location permission is granted.');
+                setIsEmergencyActive(false);
+              }
             },
           },
         ]
       );
     } else {
-      setIsEmergencyActive(false);
-      Alert.alert('SOS Deactivated', 'Emergency mode turned off.');
+      // Deactivate existing SOS
+      Alert.alert(
+        'Deactivate SOS',
+        'Are you sure you want to turn off the emergency alert?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Deactivate',
+            style: 'destructive',
+            onPress: async () => {
+              if (sosAlertId) {
+                try {
+                  await firebaseService.deactivateSOSAlert(sosAlertId);
+                  await sosNotificationService.sendSOSDeactivatedNotification();
+                } catch (err) {
+                  console.error('Failed to deactivate SOS:', err);
+                }
+              }
+
+              setIsEmergencyActive(false);
+              setSosAlertId(null);
+              Alert.alert('SOS Deactivated', 'Emergency mode has been turned off.');
+            },
+          },
+        ]
+      );
     }
   };
 
@@ -67,14 +303,32 @@ const SOSScreen = ({ navigation }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Quick SOS Actions */}
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.quickActionsTitle}>Quick Emergency Actions</Text>
+          <TouchableOpacity 
+            style={styles.quickSOSButton}
+            onPress={handleQuickSOS}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#991B1B']}
+              style={styles.quickSOSGradient}
+            >
+              <Ionicons name="warning" size={32} color="#FFFFFF" />
+              <Text style={styles.quickSOSText}>Emergency Help</Text>
+              <Text style={styles.quickSOSSubtext}>Share Location & Call Police</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
         {/* SOS Button */}
         <View style={styles.sosContainer}>
-          <Text style={styles.sosTitle}>Emergency Alert</Text>
-          <Text style={styles.sosSubtitle}>Press and hold to activate</Text>
+          <Text style={styles.sosTitle}>SOS Alert System</Text>
+          <Text style={styles.sosSubtitle}>Press to initiate emergency call</Text>
           
           <TouchableOpacity
-            onLongPress={handleSOSActivation}
-            onPress={() => Alert.alert('Hold Button', 'Press and hold to activate SOS')}
+            onPress={startCountdownAndCall}
+            onLongPress={startCountdownAndCall}
             style={styles.sosButtonWrapper}
             activeOpacity={0.9}
           >
@@ -136,6 +390,19 @@ const SOSScreen = ({ navigation }) => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Fullscreen Countdown Overlay */}
+      <Modal visible={showCountdown} transparent animationType="fade">
+        <View style={styles.overlayContainer}>
+          <View style={styles.overlayBackdrop} />
+          <View style={styles.countdownCard}>
+            <Ionicons name="warning" size={36} color="#FFFFFF" />
+            <Text style={styles.countdownTitle}>Calling Emergency</Text>
+            <Text style={styles.countdownNumber}>{countdown}</Text>
+            <Text style={styles.countdownHint}>Connecting to help...</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -170,6 +437,45 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 40,
+  },
+  quickActionsContainer: {
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  quickActionsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  quickSOSButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  quickSOSGradient: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickSOSText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 12,
+  },
+  quickSOSSubtext: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginTop: 4,
   },
   sosContainer: {
     alignItems: 'center',
@@ -216,6 +522,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
     letterSpacing: 1,
+  },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlayBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  countdownCard: {
+    width: 260,
+    borderRadius: 20,
+    backgroundColor: 'rgba(239, 68, 68, 0.95)',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  countdownTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  countdownNumber: {
+    fontSize: 64,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginVertical: 8,
+  },
+  countdownHint: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
   },
   contactsSection: {
     marginBottom: 24,

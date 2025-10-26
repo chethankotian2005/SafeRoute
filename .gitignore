@@ -33,6 +33,17 @@ package-lock.json
 .env.local
 .env.production
 .env.development
+.env.*.local
+*.env
+
+# API Keys and Secrets (NEVER COMMIT THESE)
+src/config/apiKeys.production.js
+src/config/firebaseConfig.production.js
+secrets.json
+api-keys.txt
+setup-eas-secrets.sh
+setup-eas-secrets.ps1
+fix-env-imports.js
 
 # IDE
 .vscode/

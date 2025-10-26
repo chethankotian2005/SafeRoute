@@ -64,29 +64,35 @@ export const checkLocationPermission = async () => {
  */
 export const requestNotificationPermission = async () => {
   try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+    let finalStatus = 'undetermined';
+    
+    // Wrap in try-catch to handle Android resource errors
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      finalStatus = existingStatus;
+    } catch (permError) {
+      console.log('Notification permission check failed, skipping:', permError.message);
+      return false; // Exit gracefully
     }
 
     if (finalStatus !== 'granted') {
-      Alert.alert(
-        'Notification Permission Required',
-        'SafeRoute needs notification permission to alert you about safety concerns and emergency situations.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-        ]
-      );
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      } catch (permError) {
+        console.log('Notification permission request failed, skipping:', permError.message);
+        return false; // Exit gracefully without showing alert
+      }
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('Notification permission not granted');
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error('Error requesting notification permission:', error);
+    console.log('Notification permission skipped:', error.message);
     return false;
   }
 };
@@ -198,9 +204,14 @@ export const checkAllPermissions = async () => {
     const { status: backgroundStatus } = await Location.getBackgroundPermissionsAsync();
     permissions.backgroundLocation = backgroundStatus === 'granted';
 
-    // Check notification permissions
-    const { status: notificationStatus } = await Notifications.getPermissionsAsync();
-    permissions.notifications = notificationStatus === 'granted';
+    // Check notification permissions with error handling
+    try {
+      const { status: notificationStatus } = await Notifications.getPermissionsAsync();
+      permissions.notifications = notificationStatus === 'granted';
+    } catch (notifError) {
+      console.log('Notification permission check skipped:', notifError.message);
+      permissions.notifications = false;
+    }
 
     // Check camera permissions
     const { status: cameraStatus } = await Camera.getCameraPermissionsAsync();

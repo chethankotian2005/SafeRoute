@@ -1,23 +1,30 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { THEME_COLORS } from '../utils/constants';
+import { addCommunityReport, uploadReportImage, updateCommunityReport } from '../services/firebaseService';
+import { useLocation } from '../hooks/useLocation';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const reportTypes = [
+  { id: 'harassment', label: 'Harassment', icon: 'alert-circle', color: THEME_COLORS.ALERT_RED },
+  { id: 'lighting', label: 'Poor Lighting', icon: 'bulb-outline', color: THEME_COLORS.WARNING_ORANGE },
+  { id: 'suspicious', label: 'Suspicious Activity', icon: 'eye-outline', color: THEME_COLORS.WARNING_ORANGE },
+  { id: 'safe', label: 'Safe Area', icon: 'checkmark-circle', color: THEME_COLORS.SAFETY_GREEN },
+  { id: 'accident', label: 'Accident', icon: 'medical', color: THEME_COLORS.ALERT_RED },
+  { id: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle', color: THEME_COLORS.ACCENT_BLUE },
+];
 
 const ReportFormScreen = ({ navigation }) => {
+  const { location: userLocation } = useLocation();
   const [selectedType, setSelectedType] = useState(null);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const reportTypes = [
-    { id: 'harassment', label: 'Harassment', icon: 'alert-circle', color: THEME_COLORS.ALERT_RED },
-    { id: 'lighting', label: 'Poor Lighting', icon: 'bulb-outline', color: THEME_COLORS.WARNING_ORANGE },
-    { id: 'suspicious', label: 'Suspicious Activity', icon: 'eye-outline', color: THEME_COLORS.WARNING_ORANGE },
-    { id: 'safe', label: 'Safe Area', icon: 'checkmark-circle', color: THEME_COLORS.SAFETY_GREEN },
-    { id: 'accident', label: 'Accident', icon: 'medical', color: THEME_COLORS.ALERT_RED },
-    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle', color: THEME_COLORS.ACCENT_BLUE },
-  ];
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedType) {
       Alert.alert('Select Type', 'Please select a report type');
       return;
@@ -31,28 +38,152 @@ const ReportFormScreen = ({ navigation }) => {
       return;
     }
 
+    setSubmitting(true);
+    try {
+      // Prepare base report data (without image first)
+      const reportData = {
+        type: selectedType,
+        title: getTitleFromType(selectedType),
+        description,
+        locationDescription: location,
+        location: userLocation || { latitude: 0, longitude: 0 }, // Fallback if no location
+        imageUrl: null,
+      };
+
+      // 1) Create the report first to get the ID
+      const reportId = await addCommunityReport(reportData);
+
+      // 2) If an image was selected, upload and attach URL
+      if (selectedImage) {
+        try {
+          const downloadUrl = await uploadReportImage(selectedImage.uri, reportId);
+          await updateCommunityReport(reportId, { imageUrl: downloadUrl });
+        } catch (uploadErr) {
+          // Upload failed; keep report without image
+          console.warn('Image upload failed, report saved without photo:', uploadErr);
+        }
+      }
+
+      Alert.alert(
+        'Report Submitted',
+        'Your report has been submitted successfully. Thank you for helping the community!',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      Alert.alert('Error', 'Failed to submit report. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getTitleFromType = (type) => {
+    const titleMap = {
+      'harassment': 'Harassment Reported',
+      'lighting': 'Poor Street Lighting',
+      'suspicious': 'Suspicious Activity',
+      'safe': 'Safe Area Reported',
+      'accident': 'Accident Reported',
+      'other': 'Incident Reported'
+    };
+    return titleMap[type] || 'Incident Reported';
+  };
+
+  const requestCameraPermission = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Camera Permission', 'Camera access is required to take a photo.');
+      return false;
+    }
+    return true;
+  };
+
+  const requestLibraryPermission = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Photos Permission', 'Photo library access is required to choose a photo.');
+      return false;
+    }
+    return true;
+  };
+
+  const pickImageFromCamera = async () => {
+    try {
+      const hasPermission = await requestCameraPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0]);
+      }
+    } catch (e) {
+      console.warn('Camera error:', e);
+      Alert.alert('Camera Error', 'Could not open the camera.');
+    }
+  };
+
+  const pickImageFromLibrary = async () => {
+    try {
+      const hasPermission = await requestLibraryPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0]);
+      }
+    } catch (e) {
+      console.warn('Library picker error:', e);
+      Alert.alert('Photo Picker Error', 'Could not open the photo library.');
+    }
+  };
+
+  const showImagePickerOptions = () => {
     Alert.alert(
-      'Report Submitted',
-      'Your report has been submitted successfully. Thank you for helping the community!',
+      'Add Photo',
+      'Choose how to add a photo',
       [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
+        { text: 'Take Photo', onPress: pickImageFromCamera },
+        { text: 'Choose from Library', onPress: pickImageFromLibrary },
+        { text: 'Cancel', style: 'cancel' },
       ]
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="close" size={28} color={THEME_COLORS.TEXT_PRIMARY} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Report Incident</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      {/* Modern Header with Gradient */}
+      <LinearGradient
+        colors={[THEME_COLORS.SAFETY_GREEN, '#22C55E']}
+        style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Report Incident</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <Text style={styles.headerSubtitle}>Help keep your community safe</Text>
+      </LinearGradient>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* Report Type */}
@@ -129,13 +260,35 @@ const ReportFormScreen = ({ navigation }) => {
         </View>
 
         {/* Add Photo */}
-        <TouchableOpacity
-          style={styles.photoButton}
-          onPress={() => Alert.alert('Camera', 'Photo upload coming soon')}
-        >
-          <Ionicons name="camera-outline" size={24} color={THEME_COLORS.SAFETY_GREEN} />
-          <Text style={styles.photoButtonText}>Add Photo (Optional)</Text>
-        </TouchableOpacity>
+        {selectedImage ? (
+          <View style={styles.photoSection}>
+            <Text style={styles.sectionTitle}>Photo</Text>
+            <View style={styles.selectedImageContainer}>
+              <Image source={{ uri: selectedImage.uri }} style={styles.selectedImage} />
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={() => setSelectedImage(null)}
+              >
+                <Ionicons name="close-circle" size={24} color={THEME_COLORS.ALERT_RED} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.changePhotoButton}
+              onPress={showImagePickerOptions}
+            >
+              <Ionicons name="camera-outline" size={20} color={THEME_COLORS.SAFETY_GREEN} />
+              <Text style={styles.changePhotoText}>Change Photo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.photoButton}
+            onPress={showImagePickerOptions}
+          >
+            <Ionicons name="camera-outline" size={24} color={THEME_COLORS.SAFETY_GREEN} />
+            <Text style={styles.photoButtonText}>Add Photo (Optional)</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Anonymous Option */}
         <View style={styles.anonymousContainer}>
@@ -144,8 +297,19 @@ const ReportFormScreen = ({ navigation }) => {
         </View>
 
         {/* Submit Button */}
-        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-          <Text style={styles.submitButtonText}>Submit Report</Text>
+        <TouchableOpacity 
+          style={[styles.submitButton, submitting && styles.submitButtonDisabled]} 
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <View style={styles.submitButtonContent}>
+              <Ionicons name="refresh-circle" size={20} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>Submitting...</Text>
+            </View>
+          ) : (
+            <Text style={styles.submitButtonText}>Submit Report</Text>
+          )}
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -160,26 +324,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    backgroundColor: '#FFFFFF',
     paddingTop: 50,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    marginBottom: 8,
   },
   backButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
-    color: THEME_COLORS.TEXT_PRIMARY,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
@@ -300,6 +475,43 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: THEME_COLORS.SAFETY_GREEN,
   },
+  photoSection: {
+    marginBottom: 16,
+  },
+  selectedImageContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  selectedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 4,
+  },
+  changePhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.SAFETY_GREEN,
+  },
+  changePhotoText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: THEME_COLORS.SAFETY_GREEN,
+  },
   anonymousContainer: {
     backgroundColor: '#F0FDF4',
     borderRadius: 8,
@@ -323,6 +535,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   submitButtonText: {
     fontSize: 16,

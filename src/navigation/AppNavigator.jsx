@@ -8,18 +8,25 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../context/ThemeContext';
 
 // Import screens (we'll create these next)
 import HomeScreen from '../screens/HomeScreen';
 import MapScreen from '../screens/MapScreen';
+import NavigateScreen from '../screens/NavigateScreen';
 import CommunityScreen from '../screens/CommunityScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import EmergencyContactsScreen from '../screens/EmergencyContactsScreen';
+import PrivacySecurityScreen from '../screens/PrivacySecurityScreen';
 import SOSScreen from '../screens/SOSScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import RouteDetailsScreen from '../screens/RouteDetailsScreen';
 import ReportFormScreen from '../screens/ReportFormScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import RecentDestinationsScreen from '../screens/RecentDestinationsScreen';
+import LiveNavigationScreen from '../screens/LiveNavigationScreen';
 
 import { THEME_COLORS } from '../utils/constants';
 
@@ -30,6 +37,8 @@ const Tab = createBottomTabNavigator();
  * Tab Navigator for main app screens
  */
 const MainTabNavigator = () => {
+  const { colors, isDarkMode } = useTheme();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -40,8 +49,8 @@ const MainTabNavigator = () => {
             case 'Home':
               iconName = focused ? 'home' : 'home-outline';
               break;
-            case 'Map':
-              iconName = focused ? 'map' : 'map-outline';
+            case 'Navigate':
+              iconName = focused ? 'navigate' : 'navigate-outline';
               break;
             case 'Community':
               iconName = focused ? 'people' : 'people-outline';
@@ -55,11 +64,17 @@ const MainTabNavigator = () => {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: THEME_COLORS.PRIMARY,
-        tabBarInactiveTintColor: THEME_COLORS.TEXT_SECONDARY,
+        tabBarActiveTintColor: isDarkMode ? THEME_COLORS.PRIMARY : THEME_COLORS.PRIMARY,
+        tabBarInactiveTintColor: isDarkMode ? '#808080' : colors.textSecondary,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+          marginTop: 4,
+          color: isDarkMode ? '#FFFFFF' : '#1F2937',
+        },
         tabBarStyle: {
-          backgroundColor: THEME_COLORS.SURFACE,
-          borderTopColor: THEME_COLORS.DISABLED,
+          backgroundColor: isDarkMode ? '#121212' : '#FFFFFF',
+          borderTopColor: isDarkMode ? '#333333' : '#E5E7EB',
           borderTopWidth: 1,
           height: 60,
           paddingBottom: 8,
@@ -80,14 +95,20 @@ const MainTabNavigator = () => {
         options={{ title: 'SafeRoute' }}
       />
       <Tab.Screen
-        name="Map"
-        component={MapScreen}
-        options={{ title: 'Navigate' }}
+        name="Navigate"
+        component={NavigateScreen}
+        options={{ 
+          title: 'Navigate',
+          headerShown: false,
+        }}
       />
       <Tab.Screen
         name="Community"
         component={CommunityScreen}
-        options={{ title: 'Community' }}
+        options={{ 
+          title: 'Community',
+          headerShown: false,
+        }}
       />
       <Tab.Screen
         name="Profile"
@@ -154,14 +175,27 @@ const AppNavigator = ({ isAuthenticated }) => {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name="EditProfile"
+              component={EditProfileScreen}
+              options={{ title: 'Edit Profile' }}
+            />
+            <Stack.Screen
+              name="EmergencyContacts"
+              component={EmergencyContactsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="PrivacySecurity"
+              component={PrivacySecurityScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name="SOS"
               component={SOSScreen}
               options={{
-                title: 'Emergency SOS',
+                // Hide default stack header to avoid duplicate title with custom in-screen header
+                headerShown: false,
                 presentation: 'modal',
-                headerStyle: {
-                  backgroundColor: THEME_COLORS.ERROR,
-                },
               }}
             />
             <Stack.Screen
@@ -181,6 +215,19 @@ const AppNavigator = ({ isAuthenticated }) => {
               name="Settings"
               component={SettingsScreen}
               options={{ title: 'Settings' }}
+            />
+            <Stack.Screen
+              name="RecentDestinations"
+              component={RecentDestinationsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="LiveNavigation"
+              component={LiveNavigationScreen}
+              options={{ 
+                headerShown: false,
+                presentation: 'fullScreenModal',
+              }}
             />
           </>
         ) : (

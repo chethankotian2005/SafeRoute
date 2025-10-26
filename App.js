@@ -5,7 +5,6 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { onAuthStateChanged } from 'firebase/auth';
 import * as Notifications from 'expo-notifications';
 
@@ -21,6 +20,8 @@ import { THEME_COLORS } from './src/utils/constants';
 
 // Import Theme Provider
 import { ThemeProvider } from './src/context/ThemeContext';
+import useSOSAlertsListener from './src/hooks/useSOSAlertsListener';
+import LoadingScreen from './src/components/LoadingScreen';
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -32,6 +33,8 @@ Notifications.setNotificationHandler({
 });
 
 export default function App() {
+  // Mount app-wide SOS alerts listener so users receive nearby SOS notifications
+  useSOSAlertsListener();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -68,12 +71,25 @@ export default function App() {
   // Register for push notifications
   const registerForPushNotificationsAsync = async () => {
     try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+      // Wrap permission requests in individual try-catch to handle Android resource errors
+      let finalStatus = 'undetermined';
+      
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        finalStatus = existingStatus;
+      } catch (permError) {
+        console.log('Error checking notification permissions, skipping:', permError.message);
+        return; // Exit gracefully if permission check fails
+      }
 
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
+      if (finalStatus !== 'granted') {
+        try {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        } catch (permError) {
+          console.log('Error requesting notification permissions, skipping:', permError.message);
+          return; // Exit gracefully if permission request fails
+        }
       }
 
       if (finalStatus !== 'granted') {
@@ -94,18 +110,14 @@ export default function App() {
       // You can save this token to Firebase for the user
       // await saveNotificationToken(user.uid, token);
     } catch (error) {
-      console.error('Error getting push notification token:', error);
+      console.log('Notification setup skipped:', error.message);
       // Non-critical error, app can continue without push notifications
     }
   };
 
   // Show loading screen while checking auth state
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={THEME_COLORS.PRIMARY} />
-      </View>
-    );
+    return <LoadingScreen message="Loading your safe journey" />;
   }
 
   return (
@@ -117,12 +129,3 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: THEME_COLORS.BACKGROUND,
-  },
-});

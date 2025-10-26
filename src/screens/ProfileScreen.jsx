@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Dimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -7,12 +7,35 @@ import { THEME_COLORS } from '../utils/constants';
 import { auth } from '../config/firebaseConfig';
 import { signOut } from 'firebase/auth';
 import { useTheme } from '../context/ThemeContext';
+import { getUserDocument } from '../services/firebaseService';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ProfileScreen = ({ navigation }) => {
   const { colors, isDarkMode, toggleDarkMode } = useTheme();
   const user = auth.currentUser;
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Load user data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUserData();
+    }, [])
+  );
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      const data = await getUserDocument(user.uid);
+      setUserData(data);
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -46,7 +69,7 @@ const ProfileScreen = ({ navigation }) => {
     {
       title: 'Account',
       items: [
-        { icon: 'person-outline', label: 'Edit Profile', onPress: () => Alert.alert('Edit Profile', 'Profile editing coming soon') },
+        { icon: 'person-outline', label: 'Edit Profile', onPress: () => navigation.navigate('EditProfile') },
         { icon: 'settings-outline', label: 'Settings', onPress: () => navigation.navigate('Settings') },
       ]
     },
@@ -55,14 +78,14 @@ const ProfileScreen = ({ navigation }) => {
       items: [
         { icon: 'time-outline', label: 'Safety History', onPress: () => Alert.alert('Safety History', 'View your route history') },
         { icon: 'bookmark-outline', label: 'Saved Locations', onPress: () => Alert.alert('Saved Locations', 'Manage your saved places') },
-        { icon: 'shield-outline', label: 'Emergency Contacts', onPress: () => navigation.navigate('SOS') },
+        { icon: 'alert-circle-outline', label: 'Emergency Contacts', onPress: () => navigation.navigate('EmergencyContacts') },
       ]
     },
     {
       title: 'Preferences',
       items: [
         { icon: 'notifications-outline', label: 'Notifications', onPress: () => Alert.alert('Notifications', 'Manage your notifications') },
-        { icon: 'lock-closed-outline', label: 'Privacy & Security', onPress: () => Alert.alert('Privacy', 'Privacy settings') },
+        { icon: 'lock-closed-outline', label: 'Privacy & Security', onPress: () => navigation.navigate('PrivacySecurity') },
         { icon: 'globe-outline', label: 'Language', onPress: () => Alert.alert('Language', 'Choose your language') },
         { icon: 'moon-outline', label: 'Dark Mode', onPress: toggleDarkMode, toggle: true, value: isDarkMode },
       ]
@@ -84,18 +107,27 @@ const ProfileScreen = ({ navigation }) => {
         style={styles.header}
       >
         <View style={styles.profileInfo}>
-          {/* Avatar with Camera Icon Overlay */}
+          {/* Avatar */}
           <TouchableOpacity 
             style={styles.avatarContainer}
-            onPress={() => Alert.alert('Change Photo', 'Photo upload coming soon')}
+            onPress={() => navigation.navigate('EditProfile')}
           >
-            <Ionicons name="person" size={44} color="#FFFFFF" />
-            <View style={styles.cameraIconOverlay}>
-              <Ionicons name="camera" size={16} color="#FFFFFF" />
-            </View>
+            {userData?.profileImage ? (
+              <Image 
+                source={{ uri: userData.profileImage }} 
+                style={styles.avatarImage}
+              />
+            ) : (
+              <Ionicons name="person" size={44} color="#FFFFFF" />
+            )}
           </TouchableOpacity>
-          <Text style={styles.name}>{user?.displayName || user?.email?.split('@')[0] || 'User'}</Text>
+          <Text style={styles.name}>
+            {userData?.displayName || user?.displayName || user?.email?.split('@')[0] || 'User'}
+          </Text>
           <Text style={styles.email}>{user?.email || 'user@saferoute.com'}</Text>
+          {userData?.bio ? (
+            <Text style={styles.bio}>{userData.bio}</Text>
+          ) : null}
         </View>
 
         {/* Stats with Larger Icons */}
@@ -143,7 +175,7 @@ const ProfileScreen = ({ navigation }) => {
                 ]}
                 onPress={item.onPress}
               >
-                <View style={[styles.menuIconContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.menuIconContainer, { backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.2)' : colors.background }]}>
                   <Ionicons name={item.icon} size={22} color={colors.text} />
                 </View>
                 <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
@@ -206,19 +238,12 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FFFFFF',
     position: 'relative',
+    overflow: 'hidden',
   },
-  cameraIconOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: THEME_COLORS.SAFETY_GREEN,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 45,
   },
   name: {
     fontSize: 24,
@@ -230,6 +255,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     opacity: 0.8,
+  },
+  bio: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    opacity: 0.7,
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
   archCurve: {
     position: 'absolute',

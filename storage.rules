@@ -17,8 +17,16 @@ service firebase.storage {
       return request.resource.contentType.matches('image/.*');
     }
     
-    // User profile pictures
+    // User profile pictures - supports both paths for backward compatibility
     match /profile_pictures/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() 
+        && request.auth.uid == userId 
+        && isValidSize() 
+        && isImage();
+    }
+
+    match /profile_images/{userId}/{fileName} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() 
         && request.auth.uid == userId 
